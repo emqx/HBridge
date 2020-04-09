@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main where
 
@@ -18,11 +19,13 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Concurrent.Async
 import Happstack.Server.Internal.Listen
-
+import GHC.Generics
+import Data.Aeson
 
 type BrokerName  = String
 type Topic       = String
 
+-- FOR NO USE NOW
 data MessageType = FromClient
                  | FromBroker
                  deriving (Eq, Show)
@@ -33,9 +36,7 @@ data Broker = Broker
   { brokerName   :: String
   , brokerHandle :: Handle
   , brokerSubs   :: [Topic]
-  , brokerChan   :: TChan Message
   }
-
 -- DEBUGGING
 instance Show Broker where
   show Broker{..} = "Name: " ++ brokerName ++ " Topics: " ++ show brokerSubs
@@ -47,28 +48,35 @@ newBroker n h subs = do
   return Broker { brokerName   = n
                 , brokerHandle = h
                 , brokerSubs   = subs
-                , brokerChan   = ch
                 }
-
-sendMessage :: Message -> Broker -> STM ()
-sendMessage msg Broker{..} = writeTChan brokerChan msg
-
 
 data Bridge = Bridge
   { brokers :: TVar (Map BrokerName Broker)
+  , broadcastChan :: TChan Message
   }
 
 newBridge :: IO Bridge
 newBridge = do
   v <- newTVarIO Map.empty
-  return $ Bridge v
+  ch <- newBroadcastTChanIO
+  return $ Bridge v ch
 
--- Topic rules is unavailiable now
-broadcast :: Message -> BrokerName -> Bridge -> STM ()
-broadcast msg@(Message c t _) n Bridge{..} = do
-  bs <- readTVar brokers
-  --mapM_ (sendMessage msg) $ L.filter (\b -> t `elem` brokerSubs b) (Map.elems bs)
-  mapM_ (sendMessage msg) $ Map.elems (Map.delete n bs)
+
+fwdMessage :: Handle -> Message -> IO ()
+fwdMessage h msg@(Message typ c t) =
+  hPrintf h "\n[Received] Type = %s Contents = %s Topic = %s" (show typ) (unpack c) t
+
+recvMessage :: Handle -> IO (String, String)
+recvMessage h = do
+  hPutStr h "[Contents]> "
+  contents <- hGetLine h
+  hPutStr h "[Topic]> "
+  topic    <- hGetLine h
+  return (contents, topic)
+
+matchTopic :: Topic -> Topic -> Bool
+matchTopic topic template = topic == template
+
 
 bridgePort :: Int
 bridgePort = 19198
@@ -107,8 +115,8 @@ run h bridge@Bridge{..} = do
           n <- hGetLine h
           hPutStr h "[Topics]> "
           t <- hGetLine h
-          -- let (t' :: [Topic]) = read t -- EXCEPTIONS!
-          let (t' :: [Topic]) = []
+          --let (t' :: [Topic]) = read t -- EXCEPTIONS!
+          let (t' :: [Topic]) = ["1", "2", "3"]
           if L.null n then getName
           else mask $ \restore -> do
               chk <- checkAddBroker bridge n h t'
@@ -126,19 +134,30 @@ run h bridge@Bridge{..} = do
 
 runBroker :: Broker -> Bridge -> IO ()
 runBroker broker@Broker{..} bridge@Bridge{..} = do
-  concurrently sending receive
+  ch <- atomically $ dupTChan broadcastChan
+  race (forwarding ch) (receive ch)
   return ()
   where
-    receive = forever $ do
-      hPutStr brokerHandle "[Contents]> "
-      contents <- hGetLine brokerHandle
-      hPutStr brokerHandle "[Topic]> "
-      topic   <- hGetLine brokerHandle
-      atomically $ sendMessage (Message FromClient (pack contents) topic) broker
+    receive ch = forever $ do
+      (contents, topic) <- recvMessage brokerHandle
+      atomically $ do
+        writeTChan broadcastChan (Message FromClient (pack contents) topic)
+        readTChan ch
 
-    sending = forever $ do
-      msg@(Message typ c t) <- atomically $ readTChan brokerChan
-      hPrintf brokerHandle "\n[Received] Type = %s Contents = %s Topic = %s" (show typ) (unpack c) t
-      case typ of
-        FromClient -> atomically $ broadcast (Message FromBroker c t) brokerName bridge
-        FromBroker -> return ()
+    forwarding ch = forever $ do
+      msg@(Message _ _ t) <- atomically (readTChan ch)
+      when (True `elem` (matchTopic t <$> brokerSubs)) $
+        fwdMessage brokerHandle msg
+
+
+{-
+data BrokerConfig = BrokerConfig
+  { host :: HostName
+  , port :: ServiceName
+  , name :: BrokerName
+  , topics :: [Topic]
+  }
+  deriving (Show, Generic)
+
+data Config = Config [BrokerConfig] deriving (Show, Generic)
+-}

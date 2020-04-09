@@ -31,6 +31,8 @@ dependencies:
 - stm
 - async
 - happstack-server
+- aeson
+
 
 library:
   source-dirs: src

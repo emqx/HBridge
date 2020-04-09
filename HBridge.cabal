@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d3f2be7052db76fb9d500561a54623b0cd590a42fc497badba1749897db82126
+-- hash: c53bdde1f5bfa0b09c5bcc6e89ee0a288aecd30bf68fc794f1acf26cde996861
 
 name:           HBridge
 version:        0.1.0.0
@@ -29,7 +29,8 @@ library
   hs-source-dirs:
       src
   build-depends:
-      async
+      aeson
+    , async
     , base >=4.12 && <5
     , containers
     , happstack-server
@@ -47,6 +48,7 @@ executable HBridge-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
+    , aeson
     , async
     , base >=4.12 && <5
     , containers
@@ -66,6 +68,7 @@ test-suite HBridge-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
+    , aeson
     , async
     , base >=4.12 && <5
     , containers
