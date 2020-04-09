@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a51ebc58f019900a124c68db1137cc98d20159b8ac7afa2963fc474a54a5c687
+-- hash: ad0ade7f7c563ba8b593f1f8ad5df4821df82507c84349f408825f5e0290bef6
 
 name:           HBridge
 version:        0.1.0.0
@@ -29,7 +29,13 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.12 && <4.13
+      async
+    , base >=4.12 && <4.13
+    , containers
+    , happstack-server
+    , network
+    , stm
+    , text
   default-language: Haskell2010
 
 executable HBridge-exe
@@ -41,7 +47,13 @@ executable HBridge-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
+    , async
     , base >=4.12 && <4.13
+    , containers
+    , happstack-server
+    , network
+    , stm
+    , text
   default-language: Haskell2010
 
 test-suite HBridge-test
@@ -54,5 +66,11 @@ test-suite HBridge-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
+    , async
     , base >=4.12 && <4.13
+    , containers
+    , happstack-server
+    , network
+    , stm
+    , text
   default-language: Haskell2010

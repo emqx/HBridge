@@ -25,6 +25,12 @@ extra-source-files:
 
 dependencies:
 - base >= 4.12 && < 4.13
+- text
+- containers
+- network
+- stm
+- async
+- happstack-server
 
 library:
   source-dirs: src
