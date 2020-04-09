@@ -20,9 +20,14 @@ import Control.Concurrent.Async
 import Happstack.Server.Internal.Listen
 
 
-type BrokerName = String
-type Topic      = String
-data Message    = Message Text Topic
+type BrokerName  = String
+type Topic       = String
+
+data MessageType = FromClient
+                 | FromBroker
+                 deriving (Eq, Show)
+
+data Message     = Message MessageType Text Topic
 
 data Broker = Broker
   { brokerName   :: String
@@ -60,7 +65,7 @@ newBridge = do
 
 -- Topic rules is unavailiable now
 broadcast :: Message -> BrokerName -> Bridge -> STM ()
-broadcast msg@(Message _ t) n Bridge{..} = do
+broadcast msg@(Message c t _) n Bridge{..} = do
   bs <- readTVar brokers
   --mapM_ (sendMessage msg) $ L.filter (\b -> t `elem` brokerSubs b) (Map.elems bs)
   mapM_ (sendMessage msg) $ Map.elems (Map.delete n bs)
@@ -100,7 +105,7 @@ run h bridge@Bridge{..} = do
   where getName = do
           hPutStr h "[Broker Name]> "
           n <- hGetLine h
-          hPutStrLn h "[Topics]> "
+          hPutStr h "[Topics]> "
           t <- hGetLine h
           -- let (t' :: [Topic]) = read t -- EXCEPTIONS!
           let (t' :: [Topic]) = []
@@ -114,7 +119,7 @@ run h bridge@Bridge{..} = do
                 Just broker -> do
                   --
                   bs <- atomically $ readTVar brokers
-                  hPrintf h "Current Brokers: %s\n" (show $ bs)
+                  hPrintf h "Current Brokers: %s\n" (show bs)
                   --
                   restore (runBroker broker bridge) `finally` removeBroker bridge n
 
@@ -129,9 +134,11 @@ runBroker broker@Broker{..} bridge@Bridge{..} = do
       contents <- hGetLine brokerHandle
       hPutStr brokerHandle "[Topic]> "
       topic   <- hGetLine brokerHandle
-      atomically $ sendMessage (Message (pack contents) topic) broker
+      atomically $ sendMessage (Message FromClient (pack contents) topic) broker
 
     sending = forever $ do
-      msg@(Message c t) <- atomically $ readTChan brokerChan
-      hPrintf brokerHandle "[Received] Contents = %s Topic = %s\n" (unpack c) t
-      atomically $ broadcast msg brokerName bridge
+      msg@(Message typ c t) <- atomically $ readTChan brokerChan
+      hPrintf brokerHandle "\n[Received] Type = %s Contents = %s Topic = %s" (show typ) (unpack c) t
+      case typ of
+        FromClient -> atomically $ broadcast (Message FromBroker c t) brokerName bridge
+        FromBroker -> return ()

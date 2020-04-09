@@ -11,9 +11,16 @@ packages:
       sha256: 643f83c7bb1cf294e71bb9421ba747bf7831083967ea10267db0cb9a0411c1e7
   original:
     hackage: happstack-server-7.6.0
+- completed:
+    hackage: network-run-0.2.2@sha256:34fcfda2c0e1784913bd51f4ce215f0b7ac33e37b02386132d9260982854fc22,885
+    pantry-tree:
+      size: 382
+      sha256: c2326f27b9ca3ff4c037c3c54dd094996dc1584870a634b7fc0f1086d4c82c02
+  original:
+    hackage: network-run-0.2.2
 snapshots:
 - completed:
-    size: 524996
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/27.yaml
-    sha256: 7ea31a280c56bf36ff591a7397cc384d0dff622e7f9e4225b47d8980f019a0f0
-  original: lts-14.27
+    size: 491389
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/15/7.yaml
+    sha256: 92ab6303fe20ec928461c82ce0980b4d17c06f4e66205a2967e476474f686c17
+  original: lts-15.7
