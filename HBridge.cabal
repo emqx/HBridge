@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c53bdde1f5bfa0b09c5bcc6e89ee0a288aecd30bf68fc794f1acf26cde996861
+-- hash: d6d31c1d9937095d813f8df53f6f6455ed64013120288f411b7a3f8eecca9474
 
 name:           HBridge
 version:        0.1.0.0
@@ -32,9 +32,12 @@ library
       aeson
     , async
     , base >=4.12 && <5
+    , bytestring
     , containers
+    , ekg
     , happstack-server
     , network
+    , network-run
     , stm
     , text
   default-language: Haskell2010
@@ -51,9 +54,12 @@ executable HBridge-exe
     , aeson
     , async
     , base >=4.12 && <5
+    , bytestring
     , containers
+    , ekg
     , happstack-server
     , network
+    , network-run
     , stm
     , text
   default-language: Haskell2010
@@ -71,7 +77,9 @@ test-suite HBridge-test
     , aeson
     , async
     , base >=4.12 && <5
+    , bytestring
     , containers
+    , ekg
     , happstack-server
     , network
     , network-run

@@ -18,6 +18,27 @@ packages:
       sha256: c2326f27b9ca3ff4c037c3c54dd094996dc1584870a634b7fc0f1086d4c82c02
   original:
     hackage: network-run-0.2.2
+- completed:
+    hackage: ekg-0.4.0.15@sha256:d1b824c2f3bea46fe68d1ce194c61dffe2c58a742dbbb0087f788da849c0d5dc,2031
+    pantry-tree:
+      size: 1495
+      sha256: ca44662339e9b81b21e89721a041cffe3501e1a350afb978877be4a514c075b7
+  original:
+    hackage: ekg-0.4.0.15@sha256:d1b824c2f3bea46fe68d1ce194c61dffe2c58a742dbbb0087f788da849c0d5dc,2031
+- completed:
+    hackage: ekg-core-0.1.1.7@sha256:92aa9048db9bd2dc7b1ab0f11291059c26de958e2a25cd89c5275d35dd48b96d,1950
+    pantry-tree:
+      size: 1073
+      sha256: a93d107a241498f4e1d0b60680500ffbfe86cf3e4835fcd29f3e3b6e92429edb
+  original:
+    hackage: ekg-core-0.1.1.7@sha256:92aa9048db9bd2dc7b1ab0f11291059c26de958e2a25cd89c5275d35dd48b96d,1950
+- completed:
+    hackage: ekg-json-0.1.0.6@sha256:6acb089206fb52e6f7dc44b79279c6c904b927a2fbf10d213da956c57c738361,1050
+    pantry-tree:
+      size: 265
+      sha256: 9cdc8a52a3ed072f819be232dc675a87119f1d088069152bc9cf51d2f1874680
+  original:
+    hackage: ekg-json-0.1.0.6@sha256:6acb089206fb52e6f7dc44b79279c6c904b927a2fbf10d213da956c57c738361,1050
 snapshots:
 - completed:
     size: 491389

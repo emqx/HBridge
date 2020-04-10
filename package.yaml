@@ -26,13 +26,15 @@ extra-source-files:
 dependencies:
 - base >= 4.12 && < 5
 - text
+- bytestring
 - containers
 - network
 - stm
 - async
 - happstack-server
 - aeson
-
+- ekg
+- network-run
 
 library:
   source-dirs: src
@@ -59,4 +61,3 @@ tests:
     dependencies:
     - HBridge
     - random
-    - network-run

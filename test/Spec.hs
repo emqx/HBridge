@@ -1,64 +1,75 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
-
-import HBridge
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 import Data.List as L
 import Data.Map  as Map
+import Data.Maybe (fromJust)
+import Data.String (fromString)
+import Data.ByteString.Char8 as BS
+import Data.ByteString.Lazy as BSL
+import Data.Text
+import Text.Printf
 import System.IO
 import Control.Monad
 import Control.Exception
 import Network.Socket
 import Network.Socket.ByteString
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Concurrent.Async
-import Network.Run.TCP
--- import System.Environment
+import Happstack.Server.Internal.Listen
+import GHC.Generics
+import Data.Aeson
+import System.Environment
+
 import System.Random
 import Control.Concurrent
-import Data.String
+import Network.Run.TCP
+
+import HBridge
+
+---
+myBroker1 = Broker "broker1" "localhost" "19990" ["1", "2", "3"] ["1", "2", "3"]
+myBroker2 = Broker "broker2" "localhost" "19991" ["2", "3"] ["1", "2"]
+myBroker3 = Broker "broker3" "localhost" "19992" ["3"] ["2", "3"]
+myConfig  = Config [myBroker1, myBroker2, myBroker3]
+---
 
 
+writeConfig :: IO ()
+writeConfig = BSL.writeFile "etc/config.json" $ encode myConfig
+
+-- Assume brokerFwds is not NULL
+getBrokerArgs :: IO [(ServiceName, Topic)]
+getBrokerArgs = do
+  (Config bs) <- fromJust <$> parseConfig "etc/config.json"
+  return $ (\b -> (brokerPort b, L.head $ brokerFwds b)) <$> bs
+
+main :: IO ()
 main = do
-  --arg <- getLine
-  --let (n :: Int) = read arg
-  let n = 5
-  let confs = L.zip (("Name" ++ ) <$> (show <$> [1..n])) (show <$> L.replicate n [1])
-  --mapM_ runClient confs
-  mapConcurrently_ runClient confs
+  writeConfig
+  brokerArgs <- getBrokerArgs
+  mapConcurrently_ (uncurry $ runBroker "localhost") brokerArgs
 
-
-runClient :: (String, String) -> IO ()
-runClient (name, topics) = do
-  runTCPClient "localhost" "19198" $ \s -> do
-    sendAll s (fromString name <> "\n")
-    sendAll s (fromString topics <> "\n")
-    forever $ do
+runBroker :: HostName -> ServiceName -> Topic -> IO ()
+runBroker host port topic = do
+  runTCPServer (Just host) port $ \s -> do
+    h <- socketToHandle s ReadWriteMode
+    race (receiving h) (sending h)
+    return ()
+  where
+    sending h = forever $ do
       (ri :: Int) <- randomRIO (0, 100000)
-      let msg = "[Message from " <> fromString name <> ": " <> fromString (show ri) <> "]\n"
-      sendAll s msg
-      sendAll s "1\n"
-
-      print $ "[Sent] " <> msg
+      let msg = "[Message from " <> fromString host <> ":" <> fromString port <> " : " <> fromString (show ri) <> "]\n"
+      BS.hPutStr h msg
+      BS.hPutStrLn h $ fromString topic
+      BS.putStr $ "[Sent] " <> msg
       threadDelay 1000000
 
-{-
-runClient = do
-  args <- getArgs
-  runTCPClient "localhost" "19198" $ \s -> do
-    --nameMsg <- recv s 1024
-    sendAll s (fromString (args !! 0) <> "\n")
-    --topicsMsg <- recv 1024
-    sendAll s (fromString (args !! 1) <> "\n")
-    --contentsMsg <- recv s 1024
-    forever $ do
-      (ri :: Int) <- randomRIO (0, 100000)
-      let msg = "[Message from " <> fromString (args !! 0) <> ": " <> fromString (show ri) <> "]\n"
-      sendAll s msg
-      --topicMsg <- recv s 1024
-      sendAll s "TestTopic\n"
-
-      print $ "[Sent] " <> msg
-      threadDelay 1000000
--}
+    receiving h = forever $ do
+      msg <- BS.hGetLine h
+      when (not $ BS.null msg) $
+        BS.putStrLn $ "[Received] " <> msg
