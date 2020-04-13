@@ -1,5 +1,5 @@
 # HBridge
-Simple ~~MQTT~~ RPC Bridge written in Haskell
+Simple ~~MQTT~~ TCP Message Bridge written in Haskell
 
 **It is under development and is really simple now. Everything including structure can vary at any time.**
 
@@ -17,26 +17,23 @@ This bridge supports forwarding ~~MQTT~~ messages between brokers. It is designe
 ```
 
 ## Some Details
-The bridge requires a config file `config.json` to describe all the brokers it connects to. A sample one can be found at `./etc/`.
+The bridge requires a config file `config.json` to describe all the brokers it connects to. A sample one can be found at `./etc/`. It will also be generated when you run the test case.
 
 When the bridge starts, it will try connecting to brokers described in config file. It maintains a broadcast channel which contains all the messages it received. For each broker, there is a forwarding topic list and a subscription list to control the bridging process. Messages that do not match the forwarding list will not be put into the channel, and only messages matching the subscription list will be forwarded to certain brokers.
 
 ## How to Run
-A simple test case is provided. Run
+A simple test case is provided. Note that you should run test to open "brokers":
 
 ```bash
     $ stack test
-    $ stack repl
-    ...
-    *Main HBridge> main
+    $ stack exec -- HBridge-exe etc/config.json +RTS -T
 ```
 
-Then you can see the "sending" and "forwarding" results.
+Then you can see the "connecting", "sending" and "forwarding" results. And some real-time statistics can be viewed at `localhost:22333`, provided by `ekg` package.
+
+You can also write your own test cases in `test/Spec.hs`.
 
 ## Problems
-
-- Many exceptions are not handled
-- Topic matching function is not implemented
 - **MQTT message bridging is not implemented**
 - Logging function is really silly
-- (Bad code style, chaotic string using and redundant modules)
+- Bad code style

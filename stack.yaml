@@ -38,9 +38,10 @@ packages:
 extra-deps:
   - happstack-server-7.6.0
   - network-run-0.2.2
-  - ekg-0.4.0.15@sha256:d1b824c2f3bea46fe68d1ce194c61dffe2c58a742dbbb0087f788da849c0d5dc,2031
-  - ekg-core-0.1.1.7@sha256:92aa9048db9bd2dc7b1ab0f11291059c26de958e2a25cd89c5275d35dd48b96d,1950
-  - ekg-json-0.1.0.6@sha256:6acb089206fb52e6f7dc44b79279c6c904b927a2fbf10d213da956c57c738361,1050
+  - ekg-0.4.0.15
+  - ekg-core-0.1.1.7
+  - ekg-json-0.1.0.6
+  - net-mqtt-0.6.2.3
   # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a

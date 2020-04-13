@@ -35,6 +35,7 @@ dependencies:
 - aeson
 - ekg
 - network-run
+- net-mqtt
 
 library:
   source-dirs: src

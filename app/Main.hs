@@ -8,99 +8,129 @@ module Main where
 
 import HBridge
 
-import Data.List as L
-import Data.Map  as Map
-import Data.Maybe (fromJust)
-import Data.String (fromString)
-import Data.ByteString.Lazy as BS hiding (pack, unpack, putStr, putStrLn, hPutStr, hPutStrLn, elem)
-import Data.Text
-import Text.Printf
-import System.IO
-import Control.Monad
-import Control.Exception
-import Network.Socket
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Concurrent.Async
-import Happstack.Server.Internal.Listen
-import GHC.Generics
-import Data.Aeson
-import System.Environment
---import System.Environment.Monitoring
+import qualified Data.List                       as L
+import qualified Data.Map                        as Map
+import           Data.Maybe                      (isJust, fromJust)
+import           Data.String                     (fromString)
+import           Data.Text
+import           Text.Printf
+import           System.IO
+import           Control.Monad
+import           Control.Exception
+import           Network.Socket
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Concurrent.Async
+import           Happstack.Server.Internal.Listen
+import           GHC.Generics
+import           Data.Aeson
+import           System.Environment
+import           System.Remote.Monitoring
 
-
--- EXCEPTIONS!
-getHandle :: HostName -> ServiceName -> IO Handle
-getHandle h p = do
-  addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream}) (Just h) (Just p)
+-- | Connect to a broker by host address and port
+getHandle :: HostName
+          -> ServiceName
+          -> IO (Either SomeException Handle)
+getHandle h p = try $ do
+  addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
+          (Just h) (Just p)
   sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
   connect sock $ addrAddress addr
   socketToHandle sock ReadWriteMode
 
--- EXCEPTIONS!
+-- | Collect information from config file, connect to brokers and build a bridge
 newBridge :: Config -> IO Bridge
 newBridge (Config bs) = do
-  ch <- newBroadcastTChanIO
-  tups <- mapM getItem bs
-  activeBs <- newTVarIO $ Map.fromList tups
-  return $ Bridge activeBs rules ch
+    ch       <- newBroadcastTChanIO
+    tups'    <- mapM getItem bs
+    activeBs <- newTVarIO $ Map.fromList [fromJust t | t <- tups', isJust t]
+    return $ Bridge activeBs rules ch
   where
-    rules = Map.fromList $ (\b -> (brokerName b, (brokerFwds b, brokerSubs b))) <$> bs
+    rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
+
+    getItem :: Broker -> IO (Maybe (BrokerName, Handle))
     getItem b = do
-      h <- getHandle (brokerHost b) (brokerPort b)
-      return (brokerName b, h)
+      h' <- getHandle (brokerHost b) (brokerPort b)
+      case h' of
+        Left _  -> do
+          printf "Warning: Failed to connect to %s (%s : %s).\n"
+                 (brokerName b)
+                 (brokerHost b)
+                 (brokerPort b)
+          return Nothing
+        Right h -> return $ Just (brokerName b, h)
+
 
 main :: IO ()
 main = do
-  --args <- getArgs
-  --conf <- fromJust <$> parseConfig $ args !! 1 -- EXCEPTIONS!
-  conf <- fromJust <$> parseConfig "etc/config.json"
-  bridge <- newBridge conf
-  putStrLn "Connected to brokers."
-  initBs <- atomically $ readTVar (activeBrokers bridge)
-  mapConcurrently_ (flip process bridge) (toList initBs)
+  args <- getArgs
+  when (L.length args > 0) $ do
+    conf' <- parseConfig (args !! 0)
+    case conf' of
+      Left _            -> putStrLn "Err: Failed to open file."
+      Right Nothing     -> putStrLn "Err: Failed to parse config file."
+      Right (Just conf) -> do
+        forkServer "localhost" 22333
+        bridge <- newBridge conf
+        initBs <- atomically $ readTVar (activeBrokers bridge)
+        putStrLn "Info: Connected to brokers:"
+        mapM_ putStrLn (Map.keys initBs)
 
+        mapM_ (flip process bridge) (Map.toList initBs)
 
-process :: (BrokerName, Handle) -> Bridge -> IO ()
+        c      <- getChar
+        return ()
+
+-- | Create a thread (in fact two, receiving and forwarding)
+-- for certain broker.
+process :: (BrokerName, Handle)
+        -> Bridge
+        -> IO ()
 process tup@(n, h) bridge = do
   forkFinally (run tup bridge) (\_ -> handleException)
   return ()
   where
     handleException = do
-      hClose h
       atomically $ modifyTVar (activeBrokers bridge) (Map.delete n)
+      printf "Warning: Broker %s disconnected.\n" n
+      hClose h
 
-
-run :: (BrokerName, Handle) -> Bridge -> IO ()
+-- | Describes how the bridge receives and forwards messages
+-- from/to a certain broker.
+-- It is bridge-scoped and does not care about specific behaviours
+-- of brokers, which is provided by fwdMessage' and 'recvMessge'.
+run :: (BrokerName, Handle)
+    -> Bridge
+    -> IO ()
 run tup@(n, h) Bridge{..} = do
-  ch <- atomically $ dupTChan broadcastChan
-  race (receiving ch) (forwarding ch)
-  return ()
+    ch <- atomically $ dupTChan broadcastChan
+    race (receiving ch) (forwarding ch)
+    return ()
   where
-    (fwdsTopics, subsTopics) = fromJust $ Map.lookup n rules
+    (fwds, subs) = fromJust (Map.lookup n rules)
     receiving ch = forever $ do
-      msg@(Message content topic) <- recvMessage h
+      msg@(Message _ topic) <- recvMessage h
       atomically $ do
-        when (topic `elem` fwdsTopics) $ do
+        when (topic `existMatch` fwds) $ do
           writeTChan broadcastChan msg
           readTChan ch
           return ()
     forwarding ch = forever $ do
-      msg@(Message content topic) <- atomically $ readTChan ch
-      when (topic `elem` subsTopics) $
-        fwdMessage h msg
+      msg@(Message _ topic) <- atomically (readTChan ch)
+      when (topic `existMatch` subs) (fwdMessage h msg)
 
 
 
+
+-- | Forward message to certain broker. Broker-dependent and will be
+-- replaced soon.
 fwdMessage :: Handle -> Message -> IO ()
-fwdMessage h msg@(Message c t) =
-  --hPrintf h "\n[Received] Contents = %s Topic = %s" (unpack c) t
-  hPutStrLn h (unpack c)
+fwdMessage h (Message p t) = hPutStrLn h (unpack p)
 
+-- | Receive message from certain broker. Broker-dependent and will be
+-- replaced soon.
 recvMessage :: Handle -> IO Message
 recvMessage h = do
-  --hPutStr h "[Contents]> "
-  contents <- hGetLine h
-  --hPutStr h "[Topic]> "
-  topic    <- hGetLine h
-  return $ Message (pack contents) topic
+  p <- hGetLine h
+  t <- hGetLine h
+  return $ Message (pack p) t
