@@ -26,6 +26,7 @@ extra-source-files:
 dependencies:
 - base >= 4.12 && < 5
 - text
+- time
 - bytestring
 - containers
 - network

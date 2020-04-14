@@ -31,9 +31,10 @@ A simple test case is provided. Note that you should run test to open "brokers":
 
 Then you can see the "connecting", "sending" and "forwarding" results. And some real-time statistics can be viewed at `localhost:22333`, provided by `ekg` package.
 
-You can also write your own test cases in `test/Spec.hs`.
+You can also specify some logging configs such as log file path, log level and whether output to `stderr`.
+
+Your own test cases can be written in `test/Spec.hs`.
 
 ## Problems
 - **MQTT message bridging is not implemented**
-- Logging function is really silly
 - Bad code style
