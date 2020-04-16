@@ -15,12 +15,14 @@ import           Text.Printf
 import           Data.Time
 import           System.IO
 import           Control.Monad
+import           Control.Monad.State
+import           Control.Monad.Except
+import           Control.Monad.Writer
 import           Network.Socket
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
 import           GHC.Generics
 import           Data.Aeson
-import           System.Random
 import           Control.Concurrent
 import           Network.Run.TCP
 import           HBridge
@@ -104,3 +106,13 @@ runBroker host port topic logger = do
       msg' <- BS.hGetLine h
       when (not (BS.null msg')) $
         logging logger INFO $ printf "[%s:%s] Received [%s]" host port (unpack . decodeUtf8 $ msg')
+
+-- For temporarily test only
+f1 = saveMsg "save1.txt"
+f2 = \x -> modifyTopic x "home/+/temp" "home/temp"
+f3 = saveMsg "save2.txt"
+fs = [f1, f2, f3]
+
+m1 = PlainMsg "msg1" "home/room/temp"
+
+test = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) m1 fs) 0

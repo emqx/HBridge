@@ -10,17 +10,22 @@ import           Data.Map
 import           Data.Text
 import qualified Data.ByteString                 as BS
 import qualified Data.ByteString.Lazy            as BSL
+import           Data.Functor.Identity
 import           System.IO
 import           Text.Printf
 import           Data.Time
 import           Network.Socket
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.State
+import           Control.Monad.Except
+import           Control.Monad.Writer
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Data.Aeson
 import           GHC.Generics
 import           Network.MQTT.Topic (match)
+
 
 type BrokerName  = String
 type Topic       = String
@@ -128,3 +133,27 @@ parseConfig = try . decodeFileStrict
 -- | Check if there exists a topic in the list that the given one can match.
 existMatch :: Topic -> [Topic] -> Bool
 existMatch t ts = elem True [(pack pat) `match` (pack t) | pat <- ts]
+
+-- | Monad that describes message processing stage
+type FuncSeries = ExceptT SomeException (StateT Int (WriterT String IO))
+
+-- | Sample message processign functions, for test only
+saveMsg :: FilePath -> Message -> FuncSeries Message
+saveMsg f msg = do
+  liftIO $ catchError (writeFile f (show msg)) (\e -> print e)
+  modify (+ 1)
+  log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
+  tell $ show log
+  return msg
+
+modifyTopic :: Message -> Topic -> Topic -> FuncSeries Message
+modifyTopic msg pat t' = do
+  modify (+ 1)
+  case msg of
+    PlainMsg p t -> if (pack pat) `match` (pack t)
+                       then do
+      log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" t t'
+      tell $ show log
+      return $ msg {topic = t'}
+                       else return msg
+    _            -> return msg

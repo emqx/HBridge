@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 523e3597086b6494970373ec9ed3a7fbccdb141ca16d2669e9d7a91e0c4f1019
+-- hash: dea38ef8d400486d97a03f780320c02f8378449b26b481e9677d777643087f08
 
 name:           HBridge
 version:        0.1.0.0
@@ -36,6 +36,7 @@ library
     , containers
     , ekg
     , happstack-server
+    , mtl
     , net-mqtt
     , network
     , network-run
@@ -60,6 +61,7 @@ executable HBridge-exe
     , containers
     , ekg
     , happstack-server
+    , mtl
     , net-mqtt
     , network
     , network-run
@@ -85,6 +87,7 @@ test-suite HBridge-test
     , containers
     , ekg
     , happstack-server
+    , mtl
     , net-mqtt
     , network
     , network-run

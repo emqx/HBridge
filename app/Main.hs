@@ -16,6 +16,7 @@ import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString                 as BS
 import qualified Data.ByteString.Lazy            as BSL
+import qualified Data.ByteString.Char8           as BSC (hPutStrLn)
 import           Text.Printf
 import           System.IO
 import           Data.Time
@@ -148,7 +149,7 @@ run tup@(n, h) Bridge{..} logger = do
 -- replaced soon.
 fwdMessage :: Handle -> Message -> IO ()
 fwdMessage h msg = do
-  BS.hPutStrLn h $ BSL.toStrict (encode msg)
+  BSC.hPutStrLn h $ BSL.toStrict (encode msg)
 
 -- | Receive message from certain broker. Broker-dependent and will be
 -- replaced soon.
