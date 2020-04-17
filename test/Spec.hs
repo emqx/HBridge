@@ -16,8 +16,10 @@ import           Text.Printf
 import           Data.Time
 import           System.IO
 import           Control.Monad
+import           Control.Exception
 import           Control.Monad.State
 import           Control.Monad.Except
+import           Control.Monad.Reader
 import           Control.Monad.Writer
 import           Network.Socket
 import           Control.Concurrent.Async
@@ -69,8 +71,8 @@ data SamplePayload = SamplePayload
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
-genMsg :: (HostName, ServiceName) -> Topic -> IO Message
-genMsg (h, p) t = do
+genPlainMsg :: (HostName, ServiceName) -> Topic -> IO Message
+genPlainMsg (h, p) t = do
     time <- getCurrentTime
     let payload = encode $ SamplePayload h p time
     return (PlainMsg (decodeUtf8 (BSL.toStrict payload)) t)
@@ -97,11 +99,17 @@ runBroker host port topic logger = do
     return ()
   where
     sending h logger = forever $ do
-      msg <- genMsg (host, port) topic
+      -- PlainMsg
+      msg <- genPlainMsg (host, port) topic
       let msg' = encode msg
       BS.hPutStrLn h $ BSL.toStrict msg'
+
+      let msg2 = ListFuncs
+          msg2' = encode msg2
+      BS.hPutStrLn h $ BSL.toStrict msg2'
+
       logging logger INFO $ printf "[%s:%s] Sent     [%s]" host port (unpack . decodeUtf8 . BSL.toStrict $ msg')
-      threadDelay 1000000
+      threadDelay 3000000
 
     receiving h logger = forever $ do
       msg' <- BS.hGetLine h
@@ -121,6 +129,6 @@ f6 = \x -> modifyField x ["payloadHost", "v1"] v2
 fs = [f1, f2, f3, f4, f5, f6]
 
 m1 = PlainMsg "msg1" "home/room/temp"
-gm = genMsg ("localhost", "19199") "home/room/temp"
+gm = genPlainMsg ("localhost", "19199") "home/room/temp"
 
 test msg = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0

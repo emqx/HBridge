@@ -15,6 +15,7 @@ import qualified Data.ByteString                 as BS
 import qualified Data.ByteString.Lazy            as BSL
 import           Data.Functor.Identity
 import           System.IO
+import           System.Environment
 import           Text.Printf
 import           Data.Time
 import           Network.Socket
@@ -85,8 +86,9 @@ logProcess Logger{..} = do
   (h'  :: Either SomeException Handle) <- try $ openFile loggerFile WriteMode
   (dh' :: Either SomeException Handle) <- try $ openFile (show time ++ ".log") WriteMode
   forever $ do
-    (Log c p t) <- atomically $ readTChan loggerChan
-    let s = printf "[%7s][%30s] %s" (show t) (show p) c
+    log <- atomically $ readTChan loggerChan
+    --let s = printf "[%7s][%30s] %s" (show p) (show t) c
+    let s = show log
     when loggerToStdErr (hPutStrLn stderr s)
     case h' of
       Right h -> hPutStrLn h s
@@ -99,7 +101,11 @@ logProcess Logger{..} = do
 data Message = PlainMsg { payload :: Text
                         , topic   :: Topic
                         }
-             | ForTest
+             | ListFuncs
+             | InsertSaveMsg String Int FilePath
+             | InsertModifyTopic String Int Topic Topic
+             | InsertModifyField String Int [Text] Value
+             | DeleteFunc Int
              deriving (Show, Generic, FromJSON, ToJSON)
 
 -- | A broker. It contains only static information so
@@ -129,11 +135,24 @@ data Bridge = Bridge
   { activeBrokers :: TVar (Map BrokerName Handle)            -- Active connections to brokers
   , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- Topic rules
   , broadcastChan :: TChan Message                           -- Broadcast channel
+  , functions     :: TVar [(String, Message -> FuncSeries Message)]         -- Processing functions
   }
 
+-- | Environment. It describes the state of system
+data Env = Env
+  { envBridge :: Bridge
+  , envConfig :: Config
+  , envLogger :: Logger
+  }
+
+
 -- | Parse a config file. It may fail and throw an exception.
-parseConfig :: FilePath -> IO (Either SomeException (Maybe Config))
-parseConfig = try . decodeFileStrict
+parseConfig :: ExceptT String IO (Maybe Config)
+parseConfig = do
+  args <- liftIO getArgs
+  if L.null args
+    then throwError "No argument given."
+    else liftIO $ decodeFileStrict (L.head args)
 
 -- | Check if there exists a topic in the list that the given one can match.
 existMatch :: Topic -> [Topic] -> Bool
@@ -142,10 +161,15 @@ existMatch t ts = elem True [(pack pat) `match` (pack t) | pat <- ts]
 -- | Monad that describes message processing stage
 type FuncSeries = ExceptT SomeException (StateT Int (WriterT String IO))
 
+
+runFuncSeries :: Message -> [Message -> FuncSeries Message] -> IO ((Either SomeException Message, Int), String)
+runFuncSeries msg fs = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0
+
+
 -- | Sample message processign functions, for test only
 saveMsg :: FilePath -> Message -> FuncSeries Message
 saveMsg f msg = do
-  liftIO $ catchError (writeFile f (show msg)) (\e -> print e)
+  liftIO $ catchError (appendFile f (show msg)) (\e -> print e)
   modify (+ 1)
   log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
   tell $ show log
@@ -187,3 +211,12 @@ modifyTopic msg pat t' = do
       return $ msg {topic = t'}
                        else return msg
     _            -> return msg
+
+
+
+
+
+insertToN :: Int -> a -> [a] -> [a]
+insertToN n x xs
+  | n < 0 || n > L.length xs = xs ++ [x]
+  | otherwise = L.take n xs ++ [x] ++ L.drop n xs

@@ -9,8 +9,10 @@ module Main where
 import HBridge
 
 import qualified Data.List                       as L
+import qualified Data.HashMap.Strict             as HM
 import qualified Data.Map                        as Map
 import           Data.Maybe                      (isJust, fromJust)
+import           Data.Either                     (isLeft, isRight)
 import           Data.String                     (fromString)
 import           Data.Text
 import           Data.Text.Encoding
@@ -21,7 +23,11 @@ import           Text.Printf
 import           System.IO
 import           Data.Time
 import           Control.Monad
+import           Control.Monad.Reader
+import           Control.Monad.Writer
+import           Control.Monad.Except
 import           Control.Exception
+import           GHC.IO.Exception
 import           Network.Socket
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -32,79 +38,82 @@ import           Data.Aeson
 import           System.Environment
 import           System.Remote.Monitoring
 
--- | Connect to a broker by host address and port
-getHandle :: HostName
-          -> ServiceName
-          -> IO (Either SomeException Handle)
-getHandle h p = try $ do
-  addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
+
+getHandle' :: ExceptT String (ReaderT Broker IO) (BrokerName, Handle)
+getHandle' = do
+  b@(Broker n h p _ _) <- ask
+  (h' :: Either SomeException Handle) <- liftIO . try $ do
+    addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
           (Just h) (Just p)
-  sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-  connect sock $ addrAddress addr
-  socketToHandle sock ReadWriteMode
+    sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+    connect sock $ addrAddress addr
+    socketToHandle sock ReadWriteMode
+  case h' of
+    Left e -> throwError $ printf "Failed to connect to %s (%s:%s) : %s." n h p (show e)
+    Right h -> return (n, h)
 
--- | Collect information from config file, connect to brokers and build a bridge
-newBridge :: Config -> Logger -> IO Bridge
-newBridge Config{..} logger = do
-    ch               <- newBroadcastTChanIO
-    tups'    <- mapM getItem brokers
-    activeBs         <- newTVarIO $ Map.fromList [fromJust t | t <- tups', isJust t]
-    return $ Bridge activeBs rules ch
-  where
-    rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- brokers]
+-- | Connect to brokers and get handles; make a logger and finally
+-- generate Env
+newEnv :: ReaderT Config IO Env
+newEnv = do
+  conf@(Config bs _ _ _) <- ask    -- envConfig
+  logger <- liftIO $ mkLogger conf -- envLogger
 
-    getItem :: Broker -> IO (Maybe (BrokerName, Handle))
-    getItem b = do
-      h' <- getHandle (brokerHost b) (brokerPort b)
-      case h' of
-        Left _  -> do
-          logging logger WARNING $ printf "Failed to connect to %s (%s : %s)."
-                                   (brokerName b)
-                                   (brokerHost b)
-                                   (brokerPort b)
-          return Nothing
-        Right h -> return $ Just (brokerName b, h)
+  ch <- liftIO newBroadcastTChanIO -- broadcastChan
+
+
+  -- FOR TEST
+  -- funcs <- liftIO $ newTVarIO []     -- functions
+  let v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
+  funcs <- liftIO $ newTVarIO [ ("ModifyTopic_1", \x -> modifyTopic x "home/+/temp" "home/temp")
+                              , ("ModifyField_1", \x -> modifyField x ["payloadHost"] v1)
+                              ]
+  --
+
+
+  tups' <- liftIO $ mapM (runReaderT (runExceptT getHandle')) bs
+  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups') -- Failed to connect, log
+  activeBs <- liftIO . newTVarIO $ Map.fromList [ t | (Right t) <- (L.filter isRight tups')]
+  let rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
+  return $ Env
+    { envBridge = Bridge activeBs rules ch funcs
+    , envConfig = conf
+    , envLogger = logger
+    }
 
 
 main :: IO ()
 main = do
-  args <- getArgs
-  when (L.length args > 0) $ do
-    conf' <- parseConfig (args !! 0)
-    case conf' of
-      Left _            -> error "Failed to open file."
-      Right Nothing     -> error "Failed to parse config file."
-      Right (Just conf) -> do
-        forkServer "localhost" 22333
-        logger <- mkLogger conf
-        forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
+  conf' <- runExceptT parseConfig
+  case conf' of
+    Left e -> error e
+    Right Nothing -> error "Failed to parse config file."
+    Right (Just conf) -> do
+      forkServer "localhost" 22333                        -- ekg
+      env@(Env bridge _ logger) <- runReaderT newEnv conf -- create env
+      forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
 
-        bridge <- newBridge conf logger
-        initBs <- atomically $ readTVar (activeBrokers bridge)
-        logging logger INFO $ "Connected to brokers:\n" ++ L.intercalate "\n" (Map.keys initBs)
+      initBs <- atomically $ readTVar (activeBrokers bridge)
+      logging logger INFO $ "Connected to brokers:\n" ++ L.intercalate "\n" (Map.keys initBs)
+      mapM_ (\tup -> process tup env) (Map.toList initBs)
 
-        mapM_ (\tup -> process tup bridge logger) (Map.toList initBs)
-
-        _      <- getChar
-        return ()
+      _      <- getChar
+      return ()
 
 
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain broker.
 process :: (BrokerName, Handle)
-        -> Bridge
-        -> Logger
+        -> Env
         -> IO ()
-process tup@(n, h) bridge logger = do
-  forkFinally (run tup bridge logger) (\e -> handleException e)
-  return ()
+process tup@(n, h) env@(Env Bridge{..} _ logger) = do
+    forkFinally (run tup env) (\e -> handleException e)
+    return ()
   where
-    handleException e =
-      case e of
+    handleException e = case e of
         Left e -> do
-          atomically $ modifyTVar (activeBrokers bridge) (Map.delete n)
-          logging logger WARNING $
-            printf "Broker %s disconnected (%s)\n" n (show e)
+          atomically $ modifyTVar activeBrokers (Map.delete n)
+          logging logger WARNING $ printf "Broker %s disconnected (%s)\n" n (show e)
           hClose h
         _     -> return ()
 
@@ -113,10 +122,9 @@ process tup@(n, h) bridge logger = do
 -- It is bridge-scoped and does not care about specific behaviours
 -- of brokers, which is provided by fwdMessage' and 'recvMessge'.
 run :: (BrokerName, Handle)
-    -> Bridge
-    -> Logger
+    -> Env
     -> IO ()
-run tup@(n, h) Bridge{..} logger = do
+run (n, h) (Env Bridge{..} _ logger) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch logger) (forwarding ch logger)
     return ()
@@ -127,11 +135,40 @@ run tup@(n, h) Bridge{..} logger = do
       msg <- recvMessage h
       logging logger INFO $ printf "Received    [%s]." (show msg)
       case msg of
-        Just (PlainMsg _ t) -> atomically $ do
+
+        Just (PlainMsg _ t) -> do
           when (t `existMatch` fwds) $ do
-            writeTChan broadcastChan (fromJust msg)
-            readTChan ch
-            return ()
+            funcs' <- atomically $ readTVar functions
+            let funcs = snd <$> funcs'
+            ((msg', s), l) <- runFuncSeries (fromJust msg) funcs
+            case msg' of
+              Left e -> logging logger WARNING "Message transformation failed."
+              Right msg'' -> atomically $ do
+                writeTChan broadcastChan msg''
+                readTChan ch
+                return ()
+
+        Just ListFuncs -> do
+          funcs <- atomically $ readTVar functions
+          let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n") ([0..] `L.zip` (fst <$> funcs))
+          logging logger INFO $ "Functions:\n" ++ L.concat items
+
+
+        Just (InsertSaveMsg n i f) -> do
+          funcs <- atomically $ readTVar functions
+          atomically $ writeTVar functions (insertToN i (n, saveMsg f) funcs)
+          logging logger INFO $ printf "Function %s : save message to file %s." n f
+
+        Just (InsertModifyTopic n i t t') -> do
+          funcs <- atomically $ readTVar functions
+          atomically $ writeTVar functions (insertToN i (n, \x -> modifyTopic x t t') funcs)
+          logging logger INFO $ printf "Function %s : modify topic %s to %s." n t t'
+
+        Just (InsertModifyField n i fs v) -> do
+          funcs <- atomically $ readTVar functions
+          atomically $ writeTVar functions (insertToN i (n, \x -> modifyField x fs v) funcs)
+          logging logger INFO $ printf "Function %s : modify field %s to %s." n (show fs) (show v)
+
         _                   -> return ()
 
     forwarding ch logger = forever $ do
@@ -157,3 +194,6 @@ recvMessage :: Handle -> IO (Maybe Message)
 recvMessage h = do
   s <- BS.hGetLine h
   return $ decode (BSL.fromStrict s)
+
+
+--
