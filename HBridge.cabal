@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: dea38ef8d400486d97a03f780320c02f8378449b26b481e9677d777643087f08
+-- hash: 88d2692b581e9c9d8b9329a02ccbf674be4a0bb625bf3dfbc5c084d97cc0a379
 
 name:           HBridge
 version:        0.1.0.0
@@ -43,6 +43,7 @@ library
     , stm
     , text
     , time
+    , unordered-containers
   default-language: Haskell2010
 
 executable HBridge-exe
@@ -68,6 +69,7 @@ executable HBridge-exe
     , stm
     , text
     , time
+    , unordered-containers
   default-language: Haskell2010
 
 test-suite HBridge-test
@@ -95,4 +97,5 @@ test-suite HBridge-test
     , stm
     , text
     , time
+    , unordered-containers
   default-language: Haskell2010

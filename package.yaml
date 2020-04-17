@@ -29,6 +29,7 @@ dependencies:
 - time
 - bytestring
 - containers
+- unordered-containers
 - network
 - stm
 - mtl

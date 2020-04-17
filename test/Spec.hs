@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
 import qualified Data.List as L
+import qualified Data.HashMap.Strict             as HM
 import           Data.Maybe (fromJust)
 import           Data.String (fromString)
 import qualified Data.ByteString.Char8 as BS
@@ -108,11 +109,18 @@ runBroker host port topic logger = do
         logging logger INFO $ printf "[%s:%s] Received [%s]" host port (unpack . decodeUtf8 $ msg')
 
 -- For temporarily test only
+v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
+v2 = Object $ HM.fromList [("v11", Number 1919810), ("v12", String "v12v12v12")]
+
 f1 = saveMsg "save1.txt"
 f2 = \x -> modifyTopic x "home/+/temp" "home/temp"
 f3 = saveMsg "save2.txt"
-fs = [f1, f2, f3]
+f4 = \x -> modifyField x ["payloadHost"] v1
+f5 = saveMsg "save3.txt"
+f6 = \x -> modifyField x ["payloadHost", "v1"] v2
+fs = [f1, f2, f3, f4, f5, f6]
 
 m1 = PlainMsg "msg1" "home/room/temp"
+gm = genMsg ("localhost", "19199") "home/room/temp"
 
-test = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) m1 fs) 0
+test msg = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0

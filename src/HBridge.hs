@@ -6,8 +6,11 @@
 
 module HBridge where
 
+import qualified Data.List                       as L
 import           Data.Map
+import qualified Data.HashMap.Strict             as HM
 import           Data.Text
+import           Data.Text.Encoding
 import qualified Data.ByteString                 as BS
 import qualified Data.ByteString.Lazy            as BSL
 import           Data.Functor.Identity
@@ -41,7 +44,9 @@ data Log = Log
   , logPriority :: Priority
   , logTime     :: UTCTime
   }
-  deriving (Show, Eq)
+  deriving (Eq)
+instance Show Log where
+  show Log{..} = printf "[%7s][%30s] %s" (show logPriority) (show logTime) logContent
 
 -- | A logger is in fact a STM channel
 data Logger = Logger
@@ -81,7 +86,7 @@ logProcess Logger{..} = do
   (dh' :: Either SomeException Handle) <- try $ openFile (show time ++ ".log") WriteMode
   forever $ do
     (Log c p t) <- atomically $ readTChan loggerChan
-    let s = printf "[%30s][%7s] %s" (show t) (show p) c
+    let s = printf "[%7s][%30s] %s" (show t) (show p) c
     when loggerToStdErr (hPutStrLn stderr s)
     case h' of
       Right h -> hPutStrLn h s
@@ -145,6 +150,31 @@ saveMsg f msg = do
   log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
   tell $ show log
   return msg
+
+
+modifyField :: Message -> [Text] -> Value -> FuncSeries Message
+modifyField msg@(PlainMsg p t) fields v = do
+  modify (+ 1)
+  let (obj' :: Maybe Object) = decode $ (BSL.fromStrict . encodeUtf8) p
+  case obj' of
+    Just obj -> do
+      let newobj = helper obj fields v
+          newp   = encode (newobj)
+      return $ PlainMsg (decodeUtf8 . BSL.toStrict $ newp) t
+    Nothing  -> return msg
+  where
+    helper o [] v = o
+    helper o (f:fs) v =
+      case HM.lookup f o of
+        Just o' -> case o' of
+            Object o'' -> if L.null fs
+                          then HM.adjust (const v) f o
+                          else HM.adjust (const $ Object $ helper o'' fs v) f o
+            _          -> if L.null fs
+                          then HM.adjust (const v) f o
+                          else o
+        Nothing -> o
+
 
 modifyTopic :: Message -> Topic -> Topic -> FuncSeries Message
 modifyTopic msg pat t' = do
