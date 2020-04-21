@@ -39,6 +39,7 @@ dependencies:
 - ekg
 - network-run
 - net-mqtt
+- network-uri
 
 library:
   source-dirs: src

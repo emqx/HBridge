@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 88d2692b581e9c9d8b9329a02ccbf674be4a0bb625bf3dfbc5c084d97cc0a379
+-- hash: 3204dcfc572f54b4d18005655268a1fefc99328181f6f8c97b566b5efcbb2522
 
 name:           HBridge
 version:        0.1.0.0
@@ -40,6 +40,7 @@ library
     , net-mqtt
     , network
     , network-run
+    , network-uri
     , stm
     , text
     , time
@@ -66,6 +67,7 @@ executable HBridge-exe
     , net-mqtt
     , network
     , network-run
+    , network-uri
     , stm
     , text
     , time
@@ -93,6 +95,7 @@ test-suite HBridge-test
     , net-mqtt
     , network
     , network-run
+    , network-uri
     , random
     , stm
     , text

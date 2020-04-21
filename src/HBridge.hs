@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
@@ -12,7 +13,7 @@ import qualified Data.HashMap.Strict             as HM
 import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString                 as BS
-import qualified Data.ByteString.Lazy            as BSL
+import qualified Data.ByteString.Lazy            as BL
 import           Data.Functor.Identity
 import           System.IO
 import           System.Environment
@@ -28,11 +29,15 @@ import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Data.Aeson
 import           GHC.Generics
-import           Network.MQTT.Topic (match)
+
+import           Network.MQTT.Topic
+import           Network.MQTT.Client
+import           Network.MQTT.Types
+import           Network.URI
 
 
 type BrokerName  = String
-type Topic       = String
+--type Topic       = Text
 type FwdsTopics  = [Topic]
 type SubsTopics  = [Topic]
 
@@ -96,17 +101,40 @@ logProcess Logger{..} = do
                    Right dh -> hPutStrLn dh s
                    _        -> return ()
 
+
+
+
 -- | Message type. The payload part is in 'Text'
 -- type currently but can be modified soon.
 data Message = PlainMsg { payload :: Text
                         , topic   :: Topic
                         }
+             | PubPkt PublishRequest BrokerName
              | ListFuncs
              | InsertSaveMsg String Int FilePath
              | InsertModifyTopic String Int Topic Topic
              | InsertModifyField String Int [Text] Value
              | DeleteFunc Int
-             deriving (Show, Generic, FromJSON, ToJSON)
+             deriving (Show, Generic)
+
+
+deriving instance FromJSON URIAuth
+deriving instance ToJSON URIAuth
+
+deriving instance FromJSON URI
+deriving instance ToJSON URI
+
+deriving instance Generic QoS
+deriving instance FromJSON QoS
+deriving instance ToJSON QoS
+
+--deriving instance Generic PublishRequest
+--deriving instance FromJSON PublishRequest
+--deriving instance ToJSON PublishRequest
+
+--deriving instance FromJSON Message
+--deriving instance ToJSON Message
+
 
 -- | A broker. It contains only static information so
 -- it can be formed directly from config file without
@@ -115,6 +143,7 @@ data Broker = Broker
   { brokerName :: BrokerName  -- ^ Name
   , brokerHost :: HostName    -- ^ Host address
   , brokerPort :: ServiceName -- ^ Port
+  , uri        :: URI
   , brokerFwds :: FwdsTopics  -- ^ Topics it will forward
   , brokerSubs :: SubsTopics  -- ^ Topics it subscribes
   }
@@ -132,7 +161,7 @@ data Config = Config
 -- | Bridge. It contains both dynamic (active connections to brokers
 -- and a broadcast channel) and static (topics) information.
 data Bridge = Bridge
-  { activeBrokers :: TVar (Map BrokerName Handle)            -- Active connections to brokers
+  { activeBrokers :: TVar (Map BrokerName MQTTClient)            -- Active connections to brokers
   , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- Topic rules
   , broadcastChan :: TChan Message                           -- Broadcast channel
   , functions     :: TVar [(String, Message -> FuncSeries Message)]         -- Processing functions
@@ -156,7 +185,7 @@ parseConfig = do
 
 -- | Check if there exists a topic in the list that the given one can match.
 existMatch :: Topic -> [Topic] -> Bool
-existMatch t ts = elem True [(pack pat) `match` (pack t) | pat <- ts]
+existMatch t ts = elem True [pat `match` t | pat <- ts]
 
 -- | Monad that describes message processing stage
 type FuncSeries = ExceptT SomeException (StateT Int (WriterT String IO))
@@ -179,12 +208,12 @@ saveMsg f msg = do
 modifyField :: Message -> [Text] -> Value -> FuncSeries Message
 modifyField msg@(PlainMsg p t) fields v = do
   modify (+ 1)
-  let (obj' :: Maybe Object) = decode $ (BSL.fromStrict . encodeUtf8) p
+  let (obj' :: Maybe Object) = decode $ (BL.fromStrict . encodeUtf8) p
   case obj' of
     Just obj -> do
       let newobj = helper obj fields v
           newp   = encode (newobj)
-      return $ PlainMsg (decodeUtf8 . BSL.toStrict $ newp) t
+      return $ PlainMsg (decodeUtf8 . BL.toStrict $ newp) t
     Nothing  -> return msg
   where
     helper o [] v = o
@@ -204,7 +233,7 @@ modifyTopic :: Message -> Topic -> Topic -> FuncSeries Message
 modifyTopic msg pat t' = do
   modify (+ 1)
   case msg of
-    PlainMsg p t -> if (pack pat) `match` (pack t)
+    PlainMsg p t -> if pat `match` t
                        then do
       log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" t t'
       tell $ show log
