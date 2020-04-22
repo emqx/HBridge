@@ -47,13 +47,13 @@ t3 = "home/#"
 t4 = "office/light"
 t5 = "home/ac/temp"
 
-myBroker1 = Broker "broker1" "localhost" "19190" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t2, t3] [t1, t2, t3, t4, t5]
-myBroker2 = Broker "broker2" "localhost" "19191" (fromJust . parseURI $ "mqtt://localhost:1884/mqtt") [t4, t3]     [t2, t4]
-myBroker3 = Broker "broker3" "localhost" "19192" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t5]         [t2, t3]
-myBroker4 = Broker "broker4" "localhost" "19193" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t3] [t3]
+myBroker1 = Broker "broker1" MQTTConnection "localhost" "19190" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_home/"
+myBroker2 = Broker "broker2" MQTTConnection "localhost" "19191" (fromJust . parseURI $ "mqtt://localhost:1884/mqtt") [t1, t2, t3]     [t1, t2, t3, t4, t5] "mountpoint_office/"
+myBroker3 = Broker "broker3" TCPConnection  "localhost" "19192" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t5]         [t2, t3] ""
+myBroker4 = Broker "broker4" TCPConnection  "localhost" "19193" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t3] [t3]
 
 myConfig  = Config
-  { brokers =  [myBroker1, myBroker2]
+  { brokers =  [myBroker1, myBroker2, myBroker3]
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
@@ -64,25 +64,15 @@ writeConfig :: IO ()
 writeConfig = BSL.writeFile "etc/config.json" (encode myConfig)
 
 
-runClient :: String -> Topic -> IO ()
-runClient uri' t = do
+runMQTTClient :: String -> Topic -> IO ()
+runMQTTClient uri' t = do
   let (Just uri) = parseURI uri'
   mc <- connectURI mqttConfig uri
   subscribe mc [("#", subOptions)] []
   forever $ do
-    pubAliased mc t "TEST MESSAGE" False QoS2 []
+    pubAliased mc t "TEST MESSAGE" False QoS0 []
     threadDelay 2000000
 
-
-main :: IO ()
-main = do
-  logger <- mkLogger myConfig
-  return ()
-
-
-
-
-{-
 -- | Generate broker arguments. For convenience, we assume
 -- 'brokerFwds' is not empty.
 -- "L.take 2 bs" makes it that you can open brokers less than what
@@ -113,8 +103,11 @@ main = do
   logger <- mkLogger myConfig
   forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
   writeConfig
-  brokerArgs <- getBrokerArgs
-  mapConcurrently_ (\t -> runBroker "localhost" (fst t) (snd t) logger) brokerArgs
+  --brokerArgs <- getBrokerArgs
+  --mapConcurrently_ (\t -> runBroker "localhost" (fst t) (snd t) logger) brokerArgs
+  runBroker "localhost" "19192" "home/room/temp" logger
+  _ <- getChar
+  return ()
 
 -- | Run a simple broker for test. It is in fact a simple TCP server.
 runBroker :: HostName
@@ -162,5 +155,3 @@ m1 = PlainMsg "msg1" "home/room/temp"
 gm = genPlainMsg ("localhost", "19199") "home/room/temp"
 
 test msg = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0
-
--}

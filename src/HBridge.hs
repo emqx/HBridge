@@ -117,7 +117,6 @@ data Message = PlainMsg { payload :: Text
              | DeleteFunc Int
              deriving (Show, Generic)
 
-
 deriving instance FromJSON URIAuth
 deriving instance ToJSON URIAuth
 
@@ -128,24 +127,40 @@ deriving instance Generic QoS
 deriving instance FromJSON QoS
 deriving instance ToJSON QoS
 
---deriving instance Generic PublishRequest
---deriving instance FromJSON PublishRequest
---deriving instance ToJSON PublishRequest
 
---deriving instance FromJSON Message
---deriving instance ToJSON Message
+instance FromJSON BL.ByteString where
+  parseJSON = fmap (BL.fromStrict . encodeUtf8) . parseJSON
+instance ToJSON BL.ByteString where
+  toJSON bl = String (decodeUtf8 . BL.toStrict $ bl)
 
+deriving instance Generic Property
+deriving instance FromJSON Property
+deriving instance ToJSON Property
+
+deriving instance Generic PublishRequest
+deriving instance FromJSON PublishRequest
+deriving instance ToJSON PublishRequest
+
+deriving instance FromJSON Message
+deriving instance ToJSON Message
+
+
+data ConnectionType = TCPConnection
+                    | MQTTConnection
+                    deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 -- | A broker. It contains only static information so
 -- it can be formed directly from config file without
 -- other I/O actions.
 data Broker = Broker
-  { brokerName :: BrokerName  -- ^ Name
-  , brokerHost :: HostName    -- ^ Host address
-  , brokerPort :: ServiceName -- ^ Port
-  , uri        :: URI
-  , brokerFwds :: FwdsTopics  -- ^ Topics it will forward
-  , brokerSubs :: SubsTopics  -- ^ Topics it subscribes
+  { brokerName  :: BrokerName     -- ^ Name
+  , connectType :: ConnectionType -- ^ Connection type (TCP or MQTT)
+  , brokerHost  :: HostName       -- ^ Host address (for TCP)
+  , brokerPort  :: ServiceName    -- ^ Port (for TCP)
+  , uri         :: URI            -- ^ URI (for MQTT)
+  , brokerFwds  :: FwdsTopics     -- ^ Topics it will forward
+  , brokerSubs  :: SubsTopics     -- ^ Topics it subscribes
+  , brokerMount :: Topic          -- ^ Mountpoint, for changing topic on forwarding
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
@@ -161,10 +176,12 @@ data Config = Config
 -- | Bridge. It contains both dynamic (active connections to brokers
 -- and a broadcast channel) and static (topics) information.
 data Bridge = Bridge
-  { activeBrokers :: TVar (Map BrokerName MQTTClient)            -- Active connections to brokers
-  , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- Topic rules
-  , broadcastChan :: TChan Message                           -- Broadcast channel
-  , functions     :: TVar [(String, Message -> FuncSeries Message)]         -- Processing functions
+  { activeMQTT    :: TVar (Map BrokerName MQTTClient)                -- ^ Active connections to MQTT brokers
+  , activeTCP     :: TVar (Map BrokerName Handle)                    -- ^ Active TCP connections
+  , rules         :: Map BrokerName (FwdsTopics, SubsTopics)         -- ^ Topic rules
+  , mountPoints   :: Map BrokerName Topic                            -- ^ Mount points
+  , broadcastChan :: TChan Message                                   -- ^ Broadcast channel
+  , functions     :: TVar [(String, Message -> FuncSeries Message)]  -- ^ Processing functions
   }
 
 -- | Environment. It describes the state of system
@@ -234,16 +251,33 @@ modifyTopic msg pat t' = do
   modify (+ 1)
   case msg of
     PlainMsg p t -> if pat `match` t
-                       then do
+                    then do
       log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" t t'
       tell $ show log
       return $ msg {topic = t'}
+                    else return msg
+
+    PubPkt pubReq n -> if pat `match` (decodeUtf8 . BL.toStrict $ t)
+                       then do
+      log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" (decodeUtf8 . BL.toStrict $ t) t'
+      tell $ show log
+      return $ PubPkt pubReq{_pubTopic = BL.fromStrict . encodeUtf8 $ t'} n
                        else return msg
+        where
+          t = _pubTopic pubReq
+
     _            -> return msg
 
 
+-- | Compose a mountpoint with a topic
+composeMP :: Topic -> Topic -> Topic
+composeMP = append
 
+blToText :: BL.ByteString -> Text
+blToText = decodeUtf8 . BL.toStrict
 
+textToBL :: Text -> BL.ByteString
+textToBL = BL.fromStrict . encodeUtf8
 
 insertToN :: Int -> a -> [a] -> [a]
 insertToN n x xs
