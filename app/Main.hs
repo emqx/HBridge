@@ -1,43 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Main where
 
 import HBridge
 import Environment
 
-import qualified Data.List                       as L
-import qualified Data.HashMap.Strict             as HM
-import qualified Data.Map                        as Map
-import           Data.Maybe                      (isJust, fromJust)
-import           Data.Either                     (isLeft, isRight)
-import           Data.String                     (fromString)
-import           Data.Text
-import           Data.Text.Encoding
-import qualified Data.ByteString                 as BS
-import qualified Data.ByteString.Lazy            as BL
-import qualified Data.ByteString.Char8           as BSC (hPutStrLn)
+import qualified Data.List                 as L
+import qualified Data.Map                  as Map
+import           Data.Maybe                (fromJust)
+import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BL
+import qualified Data.ByteString.Char8     as BSC (hPutStrLn)
 import           Text.Printf
 import           System.IO
-import           Data.Time
 import           Control.Monad
 import           Control.Monad.Reader
-import           Control.Monad.Writer
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Control.Exception
-import           GHC.IO.Exception
-import           Network.Socket
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
-import           Happstack.Server.Internal.Listen
-import           GHC.Generics
 import           Data.Aeson
-import           System.Environment
 import           System.Remote.Monitoring
 
 import           Network.MQTT.Types

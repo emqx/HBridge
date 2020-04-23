@@ -1,42 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Environment where
 
 import qualified Data.List                       as L
 import           Data.Map                        as Map
-import           Data.Maybe                      (isJust, fromJust)
+import           Data.Maybe                      (fromJust)
 import           Data.Either                     (isLeft, isRight)
-import qualified Data.HashMap.Strict             as HM
-import           Data.Text
-import           Data.Text.Encoding
-import qualified Data.ByteString                 as BS
-import qualified Data.ByteString.Lazy            as BL
-import           Data.Functor.Identity
 import           System.IO
-import           System.Environment
 import           Text.Printf
-import           Data.Time
 import           Network.Socket
+import           Network.URI
 import           Control.Exception
-import           Control.Monad
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Control.Monad.Writer
-import           Control.Concurrent
 import           Control.Concurrent.STM
-import           Data.Aeson
-import           GHC.Generics
 
-import           Network.MQTT.Topic
 import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.URI
 
 import HBridge
 
@@ -44,15 +25,24 @@ import HBridge
 -- | Create a TCP connection and return the handle.
 getHandle :: ExceptT String (ReaderT Broker IO) (BrokerName, Handle)
 getHandle = do
-  b@(Broker n t h p _ _ _ _) <- ask
+  b@(Broker n t uri _ _ _) <- ask
+
+  let host' = uriRegName <$> uriAuthority uri
+      port' = L.tail . uriPort <$> uriAuthority uri
+
+  when (host' == Nothing || port' == Nothing) $
+    throwError $ printf "Invalid URI : %s ." (show uri)
+
   (h' :: Either SomeException Handle) <- liftIO . try $ do
     addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
-          (Just h) (Just p)
+                       host' port'
     sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
     connect sock $ addrAddress addr
     socketToHandle sock ReadWriteMode
   case h' of
-    Left e -> throwError $ printf "Failed to connect to %s (%s:%s) : %s." n h p (show e)
+    Left e -> throwError $
+              printf "Failed to connect to %s (%s:%s) : %s."
+                     n (fromJust host') (fromJust port') (show e)
     Right h -> return (n, h)
 
 -- | Create basic bridge environment without connections created.
@@ -63,7 +53,8 @@ newEnv1 = do
   ch                     <- liftIO newBroadcastTChanIO
   activeMCs              <- liftIO $ newTVarIO Map.empty
   activeTCPs             <- liftIO $ newTVarIO Map.empty
-  funcs                  <- liftIO $ newTVarIO [ ("ModifyTopic_1", \x -> modifyTopic x "office/#" "mountpoint_on_recv_office/office/light") ]
+  funcs                  <- liftIO $ newTVarIO []
+  -- ("ModifyTopic_1", \x -> modifyTopic x "office/#" "mountpoint_on_recv_office/office/light")
   let rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
       mps   = Map.fromList [(brokerName b, brokerMount b) | b <- bs]
   return $ Env
@@ -95,7 +86,8 @@ newEnv2 = do
 
   -- connect to MQTT
   tups <- liftIO $ mapM (\b -> do
-    mc <- connectURI mqttConfig{_msgCB = LowLevelCallback $ callbackFunc (brokerName b)} (uri b)
+    mc <- connectURI mqttConfig{_msgCB = LowLevelCallback $
+                                         callbackFunc (brokerName b)} (brokerURI b)
     return (brokerName b, mc)) (L.filter (\b -> connectType b == MQTTConnection) $ brokers conf)
 
   -- update active brokers
@@ -107,9 +99,11 @@ newEnv2 = do
             subscribe mc (fwds `L.zip` L.repeat subOptions) []) tups
 
   -- connect to TCP
-  tups' <- liftIO $ mapM (runReaderT (runExceptT getHandle)) (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
+  tups' <- liftIO $ mapM (runReaderT (runExceptT getHandle))
+                         (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups') -- Failed to connect, log
-  liftIO . atomically $ writeTVar (activeTCP bridge) (Map.fromList [ t | (Right t) <- (L.filter isRight tups')])
+  liftIO . atomically $ writeTVar (activeTCP bridge)
+                                  (Map.fromList [ t | (Right t) <- (L.filter isRight tups')])
 
   -- commit changes
   put $ Env bridge conf logger

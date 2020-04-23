@@ -34,12 +34,6 @@ import           Network.URI
 import           Network.MQTT.Types
 import           Network.MQTT.Client
 
-
-
-
-
-
-
 -- | Write test cases here.
 t1 = "home/room/temp"
 t2 = "home/+/temp"
@@ -47,10 +41,18 @@ t3 = "home/#"
 t4 = "office/light"
 t5 = "home/ac/temp"
 
-myBroker1 = Broker "broker1" MQTTConnection "localhost" "19190" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_home/"
-myBroker2 = Broker "broker2" MQTTConnection "localhost" "19191" (fromJust . parseURI $ "mqtt://localhost:1884/mqtt") [t1, t2, t3]     [t1, t2, t3, t4, t5] "mountpoint_office/"
-myBroker3 = Broker "broker3" TCPConnection  "localhost" "19192" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t5]         [t2, t3] ""
-myBroker4 = Broker "broker4" TCPConnection  "localhost" "19193" (fromJust . parseURI $ "mqtt://localhost:1883/mqtt") [t1, t3] [t3]
+myBroker1 = Broker "broker1" MQTTConnection
+            (fromJust . parseURI $ "mqtt://localhost:1883/mqtt")
+            [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_home/"
+myBroker2 = Broker "broker2" MQTTConnection
+            (fromJust . parseURI $ "mqtt://localhost:1884/mqtt")
+            [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_office/"
+myBroker3 = Broker "broker3" TCPConnection
+            (fromJust . parseURI $ "tcp://localhost:19192")
+            [t5] [t2, t3] ""
+myBroker4 = Broker "broker4" TCPConnection
+            (fromJust . parseURI $ "tcp://localhost:19193")
+            [t1, t3] [t3] ""
 
 myConfig  = Config
   { brokers =  [myBroker1, myBroker2, myBroker3]
@@ -63,7 +65,8 @@ myConfig  = Config
 writeConfig :: IO ()
 writeConfig = BSL.writeFile "etc/config.json" (encode myConfig)
 
-
+-- | Create a MQTT client and connect to a broker. Then
+-- send test message with certain topic continuously.
 runMQTTClient :: String -> Topic -> IO ()
 runMQTTClient uri' t = do
   let (Just uri) = parseURI uri'
@@ -80,8 +83,10 @@ runMQTTClient uri' t = do
 getBrokerArgs :: IO [(ServiceName, Topic)]
 getBrokerArgs = do
     conf <- fromJust <$> decodeFileStrict "etc/config.json"
-    return [(brokerPort b, L.head (brokerFwds b)) | b <- L.take 3 (brokers conf)]
-
+    return [(getBrokerPort b, L.head (brokerFwds b)) | b <- L.take 3 (brokers conf)]
+  where
+    getBrokerPort b = fromJust $ L.tail . uriPort <$> uriAuthority (brokerURI b)
+    -- getBrokerHost b = fromJust $ uriRegName <$> uriAuthority (brokerURI b)
 
 -- | Sample payload type, for test only.
 data SamplePayload = SamplePayload
@@ -139,7 +144,8 @@ runBroker host port topic logger = do
       when (not (BS.null msg')) $
         logging logger INFO $ printf "[%s:%s] Received [%s]" host port (unpack . decodeUtf8 $ msg')
 
--- For temporarily test only
+-- | Test message processing functions,
+-- for temporarily test only.
 v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
 v2 = Object $ HM.fromList [("v11", Number 1919810), ("v12", String "v12v12v12")]
 
