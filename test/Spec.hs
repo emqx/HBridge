@@ -7,7 +7,6 @@
 import qualified Data.List as L
 import qualified Data.HashMap.Strict             as HM
 import           Data.Maybe (fromJust)
-import           Data.String (fromString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
 import           Data.Text
@@ -16,19 +15,18 @@ import           Text.Printf
 import           Data.Time
 import           System.IO
 import           Control.Monad
-import           Control.Exception
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Control.Monad.Reader
 import           Control.Monad.Writer
 import           Network.Socket
 import           Control.Concurrent.Async
-import           Control.Concurrent.STM
 import           GHC.Generics
 import           Data.Aeson
 import           Control.Concurrent
 import           Network.Run.TCP
-import           HBridge
+
+import           Types
+import           Extra
 
 import           Network.URI
 import           Network.MQTT.Types
@@ -40,13 +38,15 @@ t2 = "home/+/temp"
 t3 = "home/#"
 t4 = "office/light"
 t5 = "home/ac/temp"
+t6 = "mountpoint_home/home/#"
+t7 = "mountpoint_office/mountpoint_on_recv_office/office/+"
 
 myBroker1 = Broker "broker1" MQTTConnection
             (fromJust . parseURI $ "mqtt://localhost:1883/mqtt")
-            [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_home/"
+            [t1] [t7] "mountpoint_home/"
 myBroker2 = Broker "broker2" MQTTConnection
             (fromJust . parseURI $ "mqtt://localhost:1884/mqtt")
-            [t1, t2, t3] [t1, t2, t3, t4, t5] "mountpoint_office/"
+            [t4] [t6] "mountpoint_office/"
 myBroker3 = Broker "broker3" TCPConnection
             (fromJust . parseURI $ "tcp://localhost:19192")
             [t5] [t2, t3] ""
@@ -73,7 +73,7 @@ runMQTTClient uri' t = do
   mc <- connectURI mqttConfig uri
   subscribe mc [("#", subOptions)] []
   forever $ do
-    pubAliased mc t "TEST MESSAGE" False QoS0 []
+    pubAliased mc t "TEST MESSAGE" False QoS2 []
     threadDelay 2000000
 
 -- | Generate broker arguments. For convenience, we assume
@@ -96,6 +96,7 @@ data SamplePayload = SamplePayload
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
+-- | Generate plain message with time as payload for test purpose.
 genPlainMsg :: (HostName, ServiceName) -> Topic -> IO Message
 genPlainMsg (h, p) t = do
     time <- getCurrentTime
@@ -110,9 +111,11 @@ main = do
   writeConfig
   --brokerArgs <- getBrokerArgs
   --mapConcurrently_ (\t -> runBroker "localhost" (fst t) (snd t) logger) brokerArgs
-  runBroker "localhost" "19192" "home/room/temp" logger
-  _ <- getChar
-  return ()
+  a1 <- async $ runBroker "localhost" "19192" "test/tcp/msg" logger
+  a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) [ ("mqtt://localhost:1883/mqtt", "home/room/temp")
+                                                         , ("mqtt://localhost:1884/mqtt", "office/light") ]
+  wait a1
+  wait a2
 
 -- | Run a simple broker for test. It is in fact a simple TCP server.
 runBroker :: HostName
@@ -136,16 +139,15 @@ runBroker host port topic logger = do
           msg2' = encode msg2
       BS.hPutStrLn h $ BSL.toStrict msg2'
 
-      logging logger INFO $ printf "[%s:%s] Sent     [%s]" host port (unpack . decodeUtf8 . BSL.toStrict $ msg')
+      logging logger INFO $ printf "[%s:%s] [TCP] Sent     [%s]" host port (unpack . decodeUtf8 . BSL.toStrict $ msg')
       threadDelay 3000000
 
     receiving h logger = forever $ do
       msg' <- BS.hGetLine h
       when (not (BS.null msg')) $
-        logging logger INFO $ printf "[%s:%s] Received [%s]" host port (unpack . decodeUtf8 $ msg')
+        logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (unpack . decodeUtf8 $ msg')
 
--- | Test message processing functions,
--- for temporarily test only.
+-- | Test message processing functions, temporarily for test only.
 v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
 v2 = Object $ HM.fromList [("v11", Number 1919810), ("v12", String "v12v12v12")]
 

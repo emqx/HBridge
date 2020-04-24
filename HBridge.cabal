@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ff9e397acb7dd1d285f59d8881580401ca3b2485ea91d7c77bf0d6493a297ee0
+-- hash: 7bf0fcaab0f924efa1177ee8037c5dbeb54901e9866cd7da8a9a3569935aea6f
 
 name:           HBridge
-version:        0.1.0.0
+version:        0.0.1
 category:       Middleware
 homepage:       https://github.com/emqx/HBridge
 bug-reports:    https://github.com/emqx/HBridge/issues
@@ -24,11 +24,13 @@ extra-source-files:
 library
   exposed-modules:
       Environment
-      HBridge
+      Extra
+      Types
   other-modules:
       Paths_HBridge
   hs-source-dirs:
       src
+  default-extensions: OverloadedStrings
   build-depends:
       aeson
     , async
@@ -54,6 +56,7 @@ executable HBridge-exe
       Paths_HBridge
   hs-source-dirs:
       app
+  default-extensions: OverloadedStrings
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
@@ -82,6 +85,7 @@ test-suite HBridge-test
       Paths_HBridge
   hs-source-dirs:
       test
+  default-extensions: OverloadedStrings
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge

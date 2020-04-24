@@ -4,8 +4,9 @@
 
 module Main where
 
-import HBridge
-import Environment
+import           Types
+import           Extra
+import           Environment
 
 import qualified Data.List                 as L
 import qualified Data.Map                  as Map
@@ -36,7 +37,7 @@ main = do
     Left e -> error e
     Right Nothing -> error "Failed to parse config file."
     Right (Just conf) -> do
-      forkServer "localhost" 22333                        -- ekg
+      forkServer "localhost" 22333
       env' <- runReaderT newEnv1 conf
       env@(Env bridge _ logger) <- execStateT newEnv2 env'
       forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
@@ -49,7 +50,7 @@ main = do
       mapM_ (\tup -> processMQTT tup env) (Map.toList initMCs)
       mapM_ (\tup -> processTCP tup env) (Map.toList initTCPs)
 
-      _      <- getChar
+      forever getChar
       return ()
 
 
@@ -87,10 +88,8 @@ runMQTT (n, mc) (Env Bridge{..} _ logger) = do
       msg <- atomically (readTChan ch)
       case msg of
         PubPkt p n' -> when ((blToText (_pubTopic p)) `existMatch` subs && n /= n') $ do
-          logging logger INFO $ printf "\n\n Msg from %s, send to %s\n\n" n' n
-          let msg' = PubPkt p{_pubTopic = textToBL $ mp `composeMP` (blToText (_pubTopic p))} n'
-          logging logger INFO $ printf "Forwarded   [%s]." (show msg')
-          pubAliased mc (mp `composeMP` (blToText (_pubTopic p))) (_pubBody p) (_pubRetain p) (_pubQoS p) (_pubProps p)
+          logging logger INFO $ printf "Forwarded   [%s] from %s to %s." (show msg) n' n
+          pubAliased mc (blToText $ _pubTopic p) (_pubBody p) (_pubRetain p) (_pubQoS p) (_pubProps p)
         _            -> return ()
 
 
@@ -132,7 +131,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
 
         Just (PlainMsg _ t) -> do
           when (t `existMatch` fwds) $ do
-            funcs' <- atomically $ readTVar functions
+            funcs' <- readTVarIO functions
             let funcs = snd <$> funcs'
             ((msg', s), l) <- runFuncSeries (fromJust msg) funcs
             case msg' of
@@ -143,22 +142,22 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
                 return ()
 
         Just ListFuncs -> do
-          funcs <- atomically $ readTVar functions
+          funcs <- readTVarIO functions
           let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n") ([0..] `L.zip` (fst <$> funcs))
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
 
         Just (InsertSaveMsg n i f) -> do
-          funcs <- atomically $ readTVar functions
+          funcs <- readTVarIO functions
           atomically $ writeTVar functions (insertToN i (n, saveMsg f) funcs)
           logging logger INFO $ printf "[TCP]  Function %s : save message to file %s." n f
 
         Just (InsertModifyTopic n i t t') -> do
-          funcs <- atomically $ readTVar functions
+          funcs <- readTVarIO functions
           atomically $ writeTVar functions (insertToN i (n, \x -> modifyTopic x t t') funcs)
           logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
 
         Just (InsertModifyField n i fs v) -> do
-          funcs <- atomically $ readTVar functions
+          funcs <- readTVarIO functions
           atomically $ writeTVar functions (insertToN i (n, \x -> modifyField x fs v) funcs)
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
