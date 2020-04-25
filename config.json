@@ -1,0 +1,61 @@
+{
+  "logFile": "test.log",
+  "logLevel": "INFO",
+  "brokers": [
+    {
+      "brokerSubs": ["mountpoint_office/mountpoint_on_recv_office/office/+"],
+      "brokerName": "broker1",
+      "brokerMount": "mountpoint_home/",
+      "brokerURI": {
+        "uriQuery": "",
+        "uriAuthority": {
+          "uriPort": ":1883",
+          "uriRegName": "localhost",
+          "uriUserInfo": ""
+        },
+        "uriScheme": "mqtt:",
+        "uriFragment": "",
+        "uriPath": "/mqtt"
+      },
+      "brokerFwds": ["home/room/temp"],
+      "connectType": "MQTTConnection"
+    },
+    {
+      "brokerSubs": ["mountpoint_home/home/#"],
+      "brokerName": "broker2",
+      "brokerMount": "mountpoint_office/",
+      "brokerURI": {
+        "uriQuery": "",
+        "uriAuthority": {
+          "uriPort": ":1884",
+          "uriRegName": "localhost",
+          "uriUserInfo": ""
+        },
+        "uriScheme": "mqtt:",
+        "uriFragment": "",
+        "uriPath": "/mqtt"
+      },
+      "brokerFwds": ["office/light"],
+      "connectType": "MQTTConnection"
+    },
+    {
+      "brokerSubs": ["home/+/temp", "home/#"],
+      "brokerName": "broker3",
+      "brokerMount": "",
+      "brokerURI": {
+        "uriQuery": "",
+        "uriAuthority": {
+          "uriPort": ":19192",
+          "uriRegName": "localhost",
+          "uriUserInfo": ""
+        },
+        "uriScheme": "tcp:",
+        "uriFragment": "",
+        "uriPath": ""
+      },
+      "brokerFwds": ["home/ac/temp"],
+      "connectType": "TCPConnection"
+    }
+  ],
+  "logToStdErr": true
+}

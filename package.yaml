@@ -1,0 +1,70 @@
+name:                HBridge
+version:             0.0.1
+
+license:             BSD3
+license-file:        LICENSE
+author:              Feng Lee
+maintainer:          feng@emqx.io
+homepage:            https://github.com/emqx/HBridge
+bug-reports:         https://github.com/emqx/HBridge/issues
+copyright:           Copyright (c) 2020 EMQ Technologies Co., Ltd.
+category:            Middleware
+
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+
+default-extensions: OverloadedStrings
+
+dependencies:
+- base >= 4.12 && < 5
+- text
+- time
+- bytestring
+- containers
+- unordered-containers
+- network
+- stm
+- mtl
+- async
+- happstack-server
+- aeson
+- ekg
+- network-run
+- net-mqtt
+- network-uri
+
+library:
+  source-dirs: src
+
+executables:
+  HBridge-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - HBridge
+
+tests:
+  HBridge-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - HBridge
+    - random
