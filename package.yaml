@@ -42,6 +42,9 @@ dependencies:
 - network-run
 - net-mqtt
 - network-uri
+- cereal
+- rocksdb-haskell
+- rocksdb-query
 
 library:
   source-dirs: src

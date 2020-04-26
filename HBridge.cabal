@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7bf0fcaab0f924efa1177ee8037c5dbeb54901e9866cd7da8a9a3569935aea6f
+-- hash: 039a523baa97fd082162094502b8dada97306b3d8f9fdd3af9ab2e14a621ac97
 
 name:           HBridge
 version:        0.0.1
@@ -36,6 +36,7 @@ library
     , async
     , base >=4.12 && <5
     , bytestring
+    , cereal
     , containers
     , ekg
     , happstack-server
@@ -44,6 +45,8 @@ library
     , network
     , network-run
     , network-uri
+    , rocksdb-haskell
+    , rocksdb-query
     , stm
     , text
     , time
@@ -64,6 +67,7 @@ executable HBridge-exe
     , async
     , base >=4.12 && <5
     , bytestring
+    , cereal
     , containers
     , ekg
     , happstack-server
@@ -72,6 +76,8 @@ executable HBridge-exe
     , network
     , network-run
     , network-uri
+    , rocksdb-haskell
+    , rocksdb-query
     , stm
     , text
     , time
@@ -93,6 +99,7 @@ test-suite HBridge-test
     , async
     , base >=4.12 && <5
     , bytestring
+    , cereal
     , containers
     , ekg
     , happstack-server
@@ -102,6 +109,8 @@ test-suite HBridge-test
     , network-run
     , network-uri
     , random
+    , rocksdb-haskell
+    , rocksdb-query
     , stm
     , text
     , time

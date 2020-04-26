@@ -1,5 +1,16 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
+{-# LANGUAGE FlexibleInstances #-}
+
+{-
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
+-}
 
 module Environment
   ( getHandle
@@ -9,9 +20,12 @@ module Environment
   ) where
 
 import qualified Data.List               as L
+import qualified Data.ByteString.Lazy    as BL
 import           Data.Map                as Map
 import           Data.Maybe              (isNothing, fromJust)
 import           Data.Either             (isLeft, isRight)
+import           Data.Time
+import qualified Data.Serialize          as S
 import           System.IO
 import           Text.Printf
 import           Network.Socket
@@ -23,6 +37,9 @@ import           Control.Monad.Except
 import           Control.Concurrent.STM
 import           Network.MQTT.Client
 import           Network.MQTT.Types
+
+import qualified Database.RocksDB       as R
+import qualified Database.RocksDB.Query as RQ
 
 import           Types
 import           Extra
@@ -68,15 +85,19 @@ getMQTTClient callbackFunc = do
               printf "Failed to connect to %s." (show uri)
     Right mc -> return (n, mc)
 
+
+instance RQ.KeyValue String (BL.ByteString, BL.ByteString)
+
 -- | Create basic bridge environment without connections created.
 newEnv1 :: ReaderT Config IO Env
 newEnv1 = do
-  conf@(Config bs _ _ _) <- ask
-  logger                 <- liftIO $ mkLogger conf
-  ch                     <- liftIO newBroadcastTChanIO
-  activeMCs              <- liftIO $ newTVarIO Map.empty
-  activeTCPs             <- liftIO $ newTVarIO Map.empty
-  funcs                  <- liftIO $ newTVarIO
+  conf@(Config bs _ _ _ db') <- ask
+  logger                     <- liftIO $ mkLogger conf
+  db                         <- R.open db' R.defaultOptions{R.createIfMissing = True}
+  ch                         <- liftIO newBroadcastTChanIO
+  activeMCs                  <- liftIO $ newTVarIO Map.empty
+  activeTCPs                 <- liftIO $ newTVarIO Map.empty
+  funcs                      <- liftIO $ newTVarIO
     [ ("SaveMsg_1", saveMsg "save1.txt")
     , ("ModifyTopic_1", \x -> modifyTopic x "office/#" "mountpoint_on_recv_office/office/light")
     , ("saveMsg_2", saveMsg "save2.txt")
@@ -87,17 +108,23 @@ newEnv1 = do
     { envBridge = Bridge activeMCs activeTCPs rules mps ch funcs
     , envConfig = conf
     , envLogger = logger
+    , envDB     = db
     }
 
 -- | Update the bridge environment from the old one with
 -- connections created.
 newEnv2 :: StateT Env IO ()
 newEnv2 = do
-  Env bridge conf logger <- get
+  Env bridge conf logger db <- get
   let ch = broadcastChan bridge
       mps = mountPoints bridge
       callbackFunc n mc pubReq = do
         logging logger INFO $ printf "Received    [%s]." (show $ PubPkt pubReq n)
+
+        -- save to DB
+        time <- getCurrentTime
+        RQ.insert db (show time) (_pubTopic pubReq, _pubBody pubReq)
+
         -- message transformation
         funcs' <- readTVarIO (functions bridge)
         let funcs = snd <$> funcs'
@@ -141,4 +168,4 @@ newEnv2 = do
   liftIO . atomically $ writeTVar (activeTCP bridge) (Map.fromList tups2)
 
   -- commit changes
-  put $ Env bridge conf logger
+  put $ Env bridge conf logger db

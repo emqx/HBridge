@@ -52,6 +52,9 @@ import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.URI
 
+import qualified Database.RocksDB as R
+import           Database.RocksDB.Query
+
 
 type BrokerName  = String
 type FwdsTopics  = [Topic]
@@ -123,6 +126,7 @@ data Config = Config
   , logToStdErr :: Bool
   , logFile     :: FilePath
   , logLevel    :: Priority
+  , dbPath      :: FilePath
   } deriving (Show, Generic, FromJSON, ToJSON)
 
 -- | Parse a config file. It may fail and throw an exception.
@@ -149,6 +153,7 @@ data Env = Env
   { envBridge :: Bridge
   , envConfig :: Config
   , envLogger :: Logger
+  , envDB     :: R.DB
   }
 
 

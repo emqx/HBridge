@@ -42,10 +42,10 @@ t6 = "mountpoint_home/home/#"
 t7 = "mountpoint_office/mountpoint_on_recv_office/office/+"
 
 myBroker1 = Broker "broker1" MQTTConnection
-            (fromJust . parseURI $ "mqtt://localhost:1883/mqtt")
+            (fromJust . parseURI $ "mqtt://localhost:1884/mqtt")
             [t1] [t7] "mountpoint_home/"
 myBroker2 = Broker "broker2" MQTTConnection
-            (fromJust . parseURI $ "mqtt://localhost:1884/mqtt")
+            (fromJust . parseURI $ "mqtt://localhost:1887/mqtt")
             [t4] [t6] "mountpoint_office/"
 myBroker3 = Broker "broker3" TCPConnection
             (fromJust . parseURI $ "tcp://localhost:19192")
@@ -59,6 +59,7 @@ myConfig  = Config
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
+  , dbPath = "/Users/commelina/Code/Rocks/testdb"
   }
 
 -- | Write config to file.
@@ -73,8 +74,8 @@ runMQTTClient uri' t = do
   mc <- connectURI mqttConfig uri
   subscribe mc [("#", subOptions)] []
   forever $ do
-    pubAliased mc t "TEST MESSAGE" False QoS2 []
-    threadDelay 2000000
+    pubAliased mc t "TEST MESSAGE" False QoS0 []
+    threadDelay 1000
 
 -- | Generate broker arguments. For convenience, we assume
 -- 'brokerFwds' is not empty.
@@ -112,8 +113,8 @@ main = do
   --brokerArgs <- getBrokerArgs
   --mapConcurrently_ (\t -> runBroker "localhost" (fst t) (snd t) logger) brokerArgs
   a1 <- async $ runBroker "localhost" "19192" "test/tcp/msg" logger
-  a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) [ ("mqtt://localhost:1883/mqtt", "home/room/temp")
-                                                         , ("mqtt://localhost:1884/mqtt", "office/light") ]
+  a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) [ ("mqtt://localhost:1884/mqtt", "home/room/temp")
+                                                         , ("mqtt://localhost:1887/mqtt", "office/light") ]
   wait a1
   wait a2
 

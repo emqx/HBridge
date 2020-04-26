@@ -39,7 +39,7 @@ main = do
     Right (Just conf) -> do
       forkServer "localhost" 22333
       env' <- runReaderT newEnv1 conf
-      env@(Env bridge _ logger) <- execStateT newEnv2 env'
+      env@(Env bridge _ logger _) <- execStateT newEnv2 env'
       forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
 
       initMCs <- readTVarIO (activeMQTT bridge)
@@ -59,7 +59,7 @@ main = do
 processMQTT :: (BrokerName, MQTTClient)
         -> Env
         -> IO ()
-processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger) = do
+processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger _) = do
     forkFinally (runMQTT tup env) (\e -> handleException e)
     return ()
   where
@@ -76,7 +76,7 @@ processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger) = do
 runMQTT :: (BrokerName, MQTTClient)
     -> Env
     -> IO ()
-runMQTT (n, mc) (Env Bridge{..} _ logger) = do
+runMQTT (n, mc) (Env Bridge{..} _ logger _) = do
     ch <- atomically $ dupTChan broadcastChan
     forkFinally (forwarding ch logger) (\e -> return ())
     return ()
@@ -99,7 +99,7 @@ runMQTT (n, mc) (Env Bridge{..} _ logger) = do
 processTCP :: (BrokerName, Handle)
         -> Env
         -> IO ()
-processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
+processTCP tup@(n, h) env@(Env Bridge{..} _ logger _) = do
     forkFinally (runTCP tup env) (\e -> handleException e)
     return ()
   where
@@ -117,7 +117,7 @@ processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
 runTCP :: (BrokerName, Handle)
     -> Env
     -> IO ()
-runTCP (n, h) (Env Bridge{..} _ logger) = do
+runTCP (n, h) (Env Bridge{..} _ logger _) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch logger) (forwarding ch logger)
     return ()
