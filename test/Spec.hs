@@ -86,13 +86,10 @@ runMQTTClient uri' t = do
 -- 'brokerFwds' is not empty.
 -- "L.take 2 bs" makes it that you can open brokers less than what
 -- described in config file.
-getBrokerArgs :: IO [(ServiceName, Topic)]
+getBrokerArgs :: IO [(ConnectionType, String, Topic)]
 getBrokerArgs = do
     conf <- fromRight myConfig <$> Y.decodeFileEither "etc/config.yaml"
-    return [(getBrokerPort b, L.head (brokerFwds b)) | b <- L.take 3 (brokers conf)]
-  where
-    getBrokerPort b = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI . brokerURI $ b)
-    -- getBrokerHost b = fromJust $ uriRegName <$> uriAuthority (brokerURI b)
+    return [(connectType b, brokerURI b, L.head (brokerFwds b)) | b <- (brokers conf)]
 
 -- | Sample payload type, for test only.
 data SamplePayload = SamplePayload
@@ -114,13 +111,15 @@ main :: IO ()
 main = do
   logger <- mkLogger myConfig
   forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
-  writeConfig
-  --brokerArgs <- getBrokerArgs
-  --mapConcurrently_ (\t -> runBroker "localhost" (fst t) (snd t) logger) brokerArgs
-  a1 <- async $ runBroker "localhost" "19192" "test/tcp/msg" logger
-  a2 <- async $ mapConcurrently_ (uncurry runMQTTClient)
-                                 [ ("mqtt://localhost:1883/mqtt", "home/room/temp")
-                                 , ("mqtt://localhost:1885/mqtt", "office/light") ]
+  --writeConfig
+  brokerArgs <- getBrokerArgs
+  let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
+      mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
+      getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
+      getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
+  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "test/tcp/msg" logger) tcpArgs
+  a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) ((\(_,b,c) -> (b,c)) <$> mqttArgs)
+
   wait a1
   wait a2
 
