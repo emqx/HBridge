@@ -1,8 +1,11 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards     #-}
 
 module Extra
   ( existMatch
+  , parseMsgFuncs
   , saveMsg
   , modifyField
   , modifyTopic
@@ -23,6 +26,7 @@ import qualified Data.ByteString.Lazy as BL
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Control.Monad.Except
+import           GHC.Generics
 import           Data.Aeson
 import           Network.MQTT.Client
 import           Network.MQTT.Types
@@ -32,20 +36,25 @@ import           Network.MQTT.Topic
 
 -- | Check if there exists a topic in the list that the given one can match.
 existMatch :: Topic -> [Topic] -> Bool
-existMatch t ts = elem True [pat `match` t | pat <- ts]
+existMatch t ts =  True `elem` [pat `match` t | pat <- ts]
+
+parseMsgFuncs :: MessageFuncs -> Message -> FuncSeries Message
+parseMsgFuncs (SaveMsg fp) = saveMsg fp
+parseMsgFuncs (ModifyField fs v) = modifyField fs v
+parseMsgFuncs (ModifyTopic pat t') = modifyTopic pat t'
+
 
 -- | Save a message to file. For any type of message.
 saveMsg :: FilePath -> Message -> FuncSeries Message
 saveMsg f msg = do
-  liftIO $ catchError (appendFile f (show msg)) (\e -> print e)
+  liftIO $ catchError (appendFile f (show msg ++ "\n")) (\e -> print e)
   modify (+ 1)
   log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
-  tell $ show log
   return msg
 
 -- | Modify certain field of payload. For PlainMsg and PubPkt types.
-modifyField :: Message -> [Text] -> Value -> FuncSeries Message
-modifyField msg fields v = case msg of
+modifyField :: [Text] -> Value -> Message -> FuncSeries Message
+modifyField fields v msg = case msg of
   PlainMsg p t -> do
     modify (+ 1)
     let (obj' :: Maybe Object) = decode (textToBL p)
@@ -82,8 +91,8 @@ modifyField msg fields v = case msg of
         Nothing -> o
 
 -- | Modify topic of message to another one. For PlainMsg and PubPkt types.
-modifyTopic :: Message -> Topic -> Topic -> FuncSeries Message
-modifyTopic msg pat t' = do
+modifyTopic :: Topic -> Topic -> Message -> FuncSeries Message
+modifyTopic pat t' msg = do
   modify (+ 1)
   case msg of
     PlainMsg p t -> if pat `match` t

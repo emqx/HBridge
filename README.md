@@ -27,6 +27,7 @@ HBridge also provides some extra features:
   + `modifyTopic`: Modify matched topic to a new one.
   + `modifyField`: Modify certain field of payload in a message to a new value (if the field exists).
 
+- Mountpoint: It means that you can set a mountpoint for each broker the bridge connects to. The mountpoint will be combined with the original topic when a message is forwarded. This is useful to prevent messages from looping between brokers. For example, mountpoint `mp/test/` can modify topic `home/room/temp` to `mp/test/home/room/temp`.
 
 ## Build and Test
 
@@ -37,8 +38,8 @@ $ stack build
 
 There is a very simple test program in `test/Spec.hs`. To run the test with default configuration, it requires several MQTT brokers at running status. We recommend `EMQ X` broker:
 ```
-$ docker run -d --name emqx -p 1883:1883 -p 8083:8083 -p 8883:8883 -p 8084:8084 -p 18083:18083 emqx/emqx
-$ docker run -d --name emqx -p 1884:1883 -p 8084:8083 -p 8884:8883 -p 8085:8084 -p 18084:18083 emqx/emqx
+$ docker run -d --name emqx1883 -p 1883:1883 -p 8083:8083 -p 8883:8883 -p 8084:8084 -p 18083:18083 emqx/emqx
+$ docker run -d --name emqx1885 -p 1885:1883 -p 8085:8083 -p 8885:8883 -p 8086:8084 -p 18085:18083 emqx/emqx
 $ stack test
 
 (in another console)
@@ -51,14 +52,15 @@ The running status can be found at `localhost:22333`.
 
 ## Configuration
 
-**CAUTION**: This part is currently at very early stage and is quite difficult to use. It will be improved soon.
+**CAUTION**: This part is currently at very early stage and can change at any time.
 
-The configuration file is at `etc/config.json`. It contains the following fields:
+The configuration file is at `etc/` in `YAML` format. A default configuration file `etc/config.yaml` is provided also. A configuration file contains the following fields:
 
 - `logFile`: Log file path.
 - `logLevel`: Log level, it can be one of `DEBUG`, `INFO`, `WARNING` and `ERROR`. Logs whose level is lower than it will not be recorded.
 - `logToStdErr`: It decides whether to log to console. It can be one of `true` and `false`.
 - `brokers`: A list of configurations of all brokers to connect to. It will be discussed later.
+- `msgFuncs`: A list of message processing functions. It will be discussed later.
 
 The `brokers` field in configuration is a list of configurations of all brokers. Each of it contains:
 
@@ -69,18 +71,23 @@ The `brokers` field in configuration is a list of configurations of all brokers.
 - `brokerFwds`: Topics this broker forwards. It is a list of strings (topics).
 - `brokerSubs`: Topics this broker subscribes. It is a list of strings (topics).
 
-A recommended way to write a configuration **currently** is to write several lines of code in `test/Spec.hs`. Then run
+The `msgFuncs` field in configuration is a list of descriptions of message processing functions. Each of it contains:
+- A name of this function. It can be any string.
+- `tag`: Type of this function. It can be one of `SaveMsg`, `ModifyTopic` and `ModifyField`, and this list can contain more members later.
+- `contents`: A list representing arguments of certain functions. This can be found in definition of `MessageFuncs` in `Types.hs`.
+
+
+Besides write configuration file manually, you can also write several lines of code in `test/Spec.hs`. Then run
 ```
 $ stack repl
 ...
 *Main Environment Extra Types> :l test/Spec.hs
 *Main> writeConfig
 ```
-The configuration file will be written at `etc/config.json`.
+The configuration file will be written at `etc/config.yaml`.
 
 To use message processing features, there are two ways but both are not easy to use `currently`:
 
+- Write functions in configuration file.
 - Hard code the functions in `newEnv1` function in `src/Environment.hs`. And there are some ones in it by default.
 - Send insertion request to the bridge by TCP connection. But it is required that the request is correctly encoded to plain text. You can refer to `runTCP` in `app/Main.hs` and `Message` definition in `src/Types.hs`.
-
-This will be improved soon.

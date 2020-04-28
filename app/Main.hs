@@ -1,12 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
+
 
 module Main where
-
-import           Types
-import           Extra
-import           Environment
 
 import qualified Data.List                 as L
 import qualified Data.Map                  as Map
@@ -25,21 +22,21 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.Async
 import           Data.Aeson
 import           System.Remote.Monitoring
-
 import           Network.MQTT.Types
 import           Network.MQTT.Client
-
+import           Types
+import           Extra
+import           Environment
 
 main :: IO ()
 main = do
   conf' <- runExceptT parseConfig
   case conf' of
     Left e -> error e
-    Right Nothing -> error "Failed to parse config file."
-    Right (Just conf) -> do
+    Right conf -> do
       forkServer "localhost" 22333
       env' <- runReaderT newEnv1 conf
-      env@(Env bridge _ logger _) <- execStateT newEnv2 env'
+      env@(Env bridge _ logger) <- execStateT newEnv2 env'
       forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
 
       initMCs <- readTVarIO (activeMQTT bridge)
@@ -48,7 +45,7 @@ main = do
       logging logger INFO $ "Active TCP connections: \n" ++ L.intercalate "\n" (Map.keys initTCPs)
 
       mapM_ (\tup -> processMQTT tup env) (Map.toList initMCs)
-      mapM_ (\tup -> processTCP tup env) (Map.toList initTCPs)
+      mapM_ (\tup -> processTCP  tup env) (Map.toList initTCPs)
 
       forever getChar
       return ()
@@ -59,7 +56,7 @@ main = do
 processMQTT :: (BrokerName, MQTTClient)
         -> Env
         -> IO ()
-processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger _) = do
+processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger) = do
     forkFinally (runMQTT tup env) (\e -> handleException e)
     return ()
   where
@@ -76,7 +73,7 @@ processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger _) = do
 runMQTT :: (BrokerName, MQTTClient)
     -> Env
     -> IO ()
-runMQTT (n, mc) (Env Bridge{..} _ logger _) = do
+runMQTT (n, mc) (Env Bridge{..} _ logger) = do
     ch <- atomically $ dupTChan broadcastChan
     forkFinally (forwarding ch logger) (\e -> return ())
     return ()
@@ -93,13 +90,12 @@ runMQTT (n, mc) (Env Bridge{..} _ logger _) = do
         _            -> return ()
 
 
-
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain TCP connection.
 processTCP :: (BrokerName, Handle)
         -> Env
         -> IO ()
-processTCP tup@(n, h) env@(Env Bridge{..} _ logger _) = do
+processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
     forkFinally (runTCP tup env) (\e -> handleException e)
     return ()
   where
@@ -117,7 +113,7 @@ processTCP tup@(n, h) env@(Env Bridge{..} _ logger _) = do
 runTCP :: (BrokerName, Handle)
     -> Env
     -> IO ()
-runTCP (n, h) (Env Bridge{..} _ logger _) = do
+runTCP (n, h) (Env Bridge{..} _ logger) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch logger) (forwarding ch logger)
     return ()
@@ -153,19 +149,18 @@ runTCP (n, h) (Env Bridge{..} _ logger _) = do
 
         Just (InsertModifyTopic n i t t') -> do
           funcs <- readTVarIO functions
-          atomically $ writeTVar functions (insertToN i (n, \x -> modifyTopic x t t') funcs)
+          atomically $ writeTVar functions (insertToN i (n, modifyTopic t t') funcs)
           logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
 
         Just (InsertModifyField n i fs v) -> do
           funcs <- readTVarIO functions
-          atomically $ writeTVar functions (insertToN i (n, \x -> modifyField x fs v) funcs)
+          atomically $ writeTVar functions (insertToN i (n, modifyField fs v) funcs)
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
         _                   -> return ()
 
     forwarding ch logger = forever $ do
       msg <- atomically (readTChan ch)
-      --logging logger INFO $ printf "[TCP]  Processing  [%s]." (show msg)
       case msg of
         PlainMsg _ t -> when (t `existMatch` subs) $ do
           let msg' = msg{payload = mp `composeMP` t}

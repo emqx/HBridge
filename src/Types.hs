@@ -15,6 +15,7 @@ module Types
   , Config(..)
   , Bridge(..)
   , Env(..)
+  , MessageFuncs(..)
   , Priority(..)
   , Log(..)
   , Logger(..)
@@ -31,6 +32,8 @@ module Types
 
 import qualified Data.List              as L
 import           Data.Map
+import           Data.Maybe             (isNothing, fromJust)
+--import           Data.Either            (isLeft, fromRight)
 import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString.Lazy   as BL
@@ -45,16 +48,12 @@ import           Control.Monad.Except
 import           Control.Monad.Writer
 import           Control.Concurrent.STM
 import           Data.Aeson
+import qualified Data.Yaml              as Y
 import           GHC.Generics
-
 import           Network.MQTT.Topic
 import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.URI
-
-import qualified Database.RocksDB as R
-import           Database.RocksDB.Query
-
 
 type BrokerName  = String
 type FwdsTopics  = [Topic]
@@ -112,7 +111,7 @@ data ConnectionType = TCPConnection
 data Broker = Broker
   { brokerName  :: BrokerName     -- ^ Name
   , connectType :: ConnectionType -- ^ Connection type (TCP or MQTT)
-  , brokerURI   :: URI            -- ^ URI (for MQTT)
+  , brokerURI   :: String         -- ^ Unparsed URI
   , brokerFwds  :: FwdsTopics     -- ^ Topics it will forward
   , brokerSubs  :: SubsTopics     -- ^ Topics it subscribes
   , brokerMount :: Topic          -- ^ Mountpoint, for changing topic on forwarding
@@ -126,16 +125,25 @@ data Config = Config
   , logToStdErr :: Bool
   , logFile     :: FilePath
   , logLevel    :: Priority
-  , dbPath      :: FilePath
+  , msgFuncs    :: [(String, MessageFuncs)]
   } deriving (Show, Generic, FromJSON, ToJSON)
 
 -- | Parse a config file. It may fail and throw an exception.
-parseConfig :: ExceptT String IO (Maybe Config)
+parseConfig :: ExceptT String IO Config
 parseConfig = do
   args <- liftIO getArgs
-  if L.null args
-    then throwError "No argument given."
-    else liftIO $ decodeFileStrict (L.head args)
+  when (L.null args) (throwError "No argument given.")
+
+  conf' <- liftIO $ Y.decodeFileEither (L.head args)
+  conf <- case conf' of
+    Left e -> throwError (show e)
+    Right conf -> return conf
+
+  let uri' = brokerURI <$> brokers conf
+      uri  = parseURI <$> uri'
+  when (Nothing `L.elem` uri)
+    (throwError $ printf "Invalid URI: %s." (uri' !! (fromJust $ L.findIndex isNothing uri)))
+  return conf
 
 -- | Bridge. It contains both dynamic (active connections to brokers
 -- and a broadcast channel) and static (topics) information.
@@ -153,8 +161,14 @@ data Env = Env
   { envBridge :: Bridge
   , envConfig :: Config
   , envLogger :: Logger
-  , envDB     :: R.DB
   }
+
+
+-- | Functions for processing messages. New members may be added at any time.
+data MessageFuncs = SaveMsg FilePath
+                  | ModifyField [Text] Value
+                  | ModifyTopic Topic Topic
+                  deriving (Show, Generic, FromJSON, ToJSON)
 
 
 -- | Priority of log
@@ -180,7 +194,7 @@ data Logger = Logger
   , loggerToStdErr :: Bool
   }
 
--- Make a logger from config file
+-- | Make a logger from config file
 mkLogger :: Config -> IO Logger
 mkLogger Config{..} = do
   ch <- newTChanIO
@@ -206,16 +220,17 @@ logProcess :: Logger -> IO ()
 logProcess Logger{..} = do
   time <- getCurrentTime
   (h'  :: Either SomeException Handle) <- try $ openFile loggerFile WriteMode
-  (dh' :: Either SomeException Handle) <- try $ openFile (show time ++ ".log") WriteMode
+  (dh' :: Either SomeException Handle) <- case h' of
+    Left _ -> try $ openFile (show time ++ ".log") WriteMode
+    Right _ -> return h'
+
   forever $ do
     log <- atomically $ readTChan loggerChan
     let s = show log
     when loggerToStdErr (hPutStrLn stderr s)
-    case h' of
+    case h' <> dh' of
       Right h -> hPutStrLn h s
-      _       -> case dh' of
-                   Right dh -> hPutStrLn dh s
-                   _        -> return ()
+      _       -> return ()
 
 
 -- | Monad that describes message processing stage
