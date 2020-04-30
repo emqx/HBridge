@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9042f733720ec8ded6605f7ea2e018419059b4d52839186fdcf3762cfa4ce2b8
+-- hash: e4da7b1e0e19779f4094c730d03200361b3d92498dfead9dfe615b6da9d3dbd9
 
 name:           HBridge
 version:        0.0.1
@@ -44,6 +44,7 @@ library
     , network
     , network-run
     , network-uri
+    , optparse-applicative
     , stm
     , text
     , time
@@ -73,6 +74,7 @@ executable HBridge-exe
     , network
     , network-run
     , network-uri
+    , optparse-applicative
     , stm
     , text
     , time
@@ -103,6 +105,7 @@ test-suite HBridge-test
     , network
     , network-run
     , network-uri
+    , optparse-applicative
     , random
     , stm
     , text

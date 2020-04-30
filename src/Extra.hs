@@ -13,6 +13,7 @@ module Extra
   , blToText
   , textToBL
   , insertToN
+  , deleteAtN
   ) where
 
 import           Types
@@ -26,7 +27,6 @@ import qualified Data.ByteString.Lazy as BL
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Control.Monad.Except
-import           GHC.Generics
 import           Data.Aeson
 import           Network.MQTT.Client
 import           Network.MQTT.Types
@@ -124,7 +124,20 @@ blToText = decodeUtf8 . BL.toStrict
 textToBL :: Text -> BL.ByteString
 textToBL = BL.fromStrict . encodeUtf8
 
+-- | Insert a element to a certain position of a list.
+-- If the index is out of bound, it will be appended to the end.
 insertToN :: Int -> a -> [a] -> [a]
 insertToN n x xs
   | n < 0 || n > L.length xs = xs ++ [x]
   | otherwise = L.take n xs ++ [x] ++ L.drop n xs
+
+-- | Delete a element at certain position of a list.
+-- If the index is out of bound, the list will not be modified.
+deleteAtN :: Int -> [a] -> [a]
+deleteAtN n xs
+  | n < 0 || n > L.length xs = xs
+  | otherwise =
+    let (p1, p2) = L.splitAt n xs
+    in case p2 of
+         []     -> p1
+         (_:ys) -> p1 ++ ys

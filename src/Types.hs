@@ -33,12 +33,10 @@ module Types
 import qualified Data.List              as L
 import           Data.Map
 import           Data.Maybe             (isNothing, fromJust)
---import           Data.Either            (isLeft, fromRight)
 import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString.Lazy   as BL
 import           System.IO
-import           System.Environment
 import           Text.Printf
 import           Data.Time
 import           Control.Exception
@@ -49,6 +47,7 @@ import           Control.Monad.Writer
 import           Control.Concurrent.STM
 import           Data.Aeson
 import qualified Data.Yaml              as Y
+import           Options.Applicative
 import           GHC.Generics
 import           Network.MQTT.Topic
 import           Network.MQTT.Client
@@ -69,7 +68,7 @@ data Message = PlainMsg { payload :: Text
              | InsertSaveMsg String Int FilePath
              | InsertModifyTopic String Int Topic Topic
              | InsertModifyField String Int [Text] Value
-             | DeleteFunc Int
+             | DeleteFunc String Int
              deriving (Show, Generic)
 
 deriving instance FromJSON URIAuth
@@ -128,35 +127,47 @@ data Config = Config
   , msgFuncs    :: [(String, MessageFuncs)]
   } deriving (Show, Generic, FromJSON, ToJSON)
 
+configP :: Parser String
+configP = strOption
+  (  long "config"
+  <> short 'c'
+  <> metavar "FILEPATH"
+  <> help "File path of configuration file" )
+
 -- | Parse a config file. It may fail and throw an exception.
 parseConfig :: ExceptT String IO Config
 parseConfig = do
-  args <- liftIO getArgs
-  when (L.null args) (throwError "No argument given.")
+    f <- liftIO $ execParser opts
 
-  conf' <- liftIO $ Y.decodeFileEither (L.head args)
-  conf <- case conf' of
-    Left e -> throwError (show e)
-    Right conf -> return conf
+    conf' <- liftIO $ Y.decodeFileEither f
+    conf <- case conf' of
+      Left e -> throwError (show e)
+      Right conf -> return conf
 
-  let uri' = brokerURI <$> brokers conf
-      uri  = parseURI <$> uri'
-  when (Nothing `L.elem` uri)
-    (throwError $ printf "Invalid URI: %s." (uri' !! (fromJust $ L.findIndex isNothing uri)))
-  return conf
+    let uri' = brokerURI <$> brokers conf
+        uri  = parseURI  <$> uri'
+    when (Nothing `L.elem` uri)
+      (throwError $ printf "Invalid URI: %s."
+                           (uri' !! (fromJust $ L.findIndex isNothing uri)) )
+    return conf
+  where
+    opts = info (configP <**> helper)
+      (  fullDesc
+      <> progDesc "Run an instance of bridge with certain configuration file"
+      <> header   "HBridge - a multi-way MQTT/TCP message bridge" )
 
 -- | Bridge. It contains both dynamic (active connections to brokers
 -- and a broadcast channel) and static (topics) information.
 data Bridge = Bridge
-  { activeMQTT    :: TVar (Map BrokerName MQTTClient)                -- ^ Active connections to MQTT brokers
-  , activeTCP     :: TVar (Map BrokerName Handle)                    -- ^ Active TCP connections
-  , rules         :: Map BrokerName (FwdsTopics, SubsTopics)         -- ^ Topic rules
-  , mountPoints   :: Map BrokerName Topic                            -- ^ Mount points
-  , broadcastChan :: TChan Message                                   -- ^ Broadcast channel
-  , functions     :: TVar [(String, Message -> FuncSeries Message)]  -- ^ Processing functions
+  { activeMQTT    :: TVar (Map BrokerName MQTTClient) -- ^ Active connections to MQTT brokers
+  , activeTCP     :: TVar (Map BrokerName Handle) -- ^ Active TCP connections
+  , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- ^ Topic rules
+  , mountPoints   :: Map BrokerName Topic -- ^ Mount points
+  , broadcastChan :: TChan Message -- ^ Broadcast channel
+  , functions     :: TVar [(String, Message -> FuncSeries Message)] -- ^ Processing functions
   }
 
--- | Environment. It describes the state of system
+-- | Environment. It describes the state of system.
 data Env = Env
   { envBridge :: Bridge
   , envConfig :: Config
@@ -171,12 +182,12 @@ data MessageFuncs = SaveMsg FilePath
                   deriving (Show, Generic, FromJSON, ToJSON)
 
 
+----------------------------------------------------------------------------------------------
 -- | Priority of log
 data Priority = DEBUG | INFO | WARNING | ERROR
               deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 
--- | Log. It contains priority, time stamp and
--- log content.
+-- | Log. It contains priority, time stamp and log content.
 data Log = Log
   { logContent  :: String
   , logPriority :: Priority
@@ -184,9 +195,12 @@ data Log = Log
   }
   deriving (Eq)
 instance Show Log where
-  show Log{..} = printf "[%7s][%30s] %s" (show logPriority) (show logTime) logContent
+  show Log{..} = printf "[%7s][%30s] %s"
+                        (show logPriority)
+                        (show logTime)
+                        logContent
 
--- | A logger is in fact a STM channel
+-- | A logger is in fact a STM channel.
 data Logger = Logger
   { loggerChan     :: TChan Log
   , loggerLevel    :: Priority
@@ -194,24 +208,24 @@ data Logger = Logger
   , loggerToStdErr :: Bool
   }
 
--- | Make a logger from config file
+-- | Make a logger from config file.
 mkLogger :: Config -> IO Logger
 mkLogger Config{..} = do
   ch <- newTChanIO
   return $ Logger ch logLevel logFile logToStdErr
 
--- | Generate a log item
+-- | Generate a log item.
 mkLog :: Priority -> String -> IO Log
 mkLog p s = do
   time <- getCurrentTime
   return (Log s p time)
 
--- | Pass a log item to logger
+-- | Pass a log item to logger.
 commitLog :: Log -> Logger -> IO ()
 commitLog l Logger{..} = when (logPriority l >= loggerLevel)
                               (atomically $ writeTChan loggerChan l)
 
--- | Generate and then commit a log item
+-- | Generate and then commit a log item.
 logging :: Logger -> Priority -> String -> IO ()
 logging ch p s = mkLog p s >>= flip commitLog ch
 
@@ -232,11 +246,13 @@ logProcess Logger{..} = do
       Right h -> hPutStrLn h s
       _       -> return ()
 
-
--- | Monad that describes message processing stage
+----------------------------------------------------------------------------------------------
+-- | Monad that describes message processing stage.
 type FuncSeries = ExceptT SomeException (StateT Int (WriterT String IO))
 
+-- | Run the monad to pass a message through a series of functions.
 runFuncSeries :: Message
   -> [Message -> FuncSeries Message]
   -> IO ((Either SomeException Message, Int), String)
-runFuncSeries msg fs = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0
+runFuncSeries msg fs = runWriterT $ runStateT
+                                    (runExceptT $ foldM (\acc f -> f acc) msg fs) 0

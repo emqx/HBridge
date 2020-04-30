@@ -57,7 +57,7 @@ processMQTT :: (BrokerName, MQTTClient)
         -> Env
         -> IO ()
 processMQTT tup@(n, mc) env@(Env Bridge{..} _ logger) = do
-    forkFinally (runMQTT tup env) (\e -> handleException e)
+    forkFinally (runMQTT tup env) handleException
     return ()
   where
     handleException e = case e of
@@ -139,23 +139,25 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
 
         Just ListFuncs -> do
           funcs <- readTVarIO functions
-          let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n") ([0..] `L.zip` (fst <$> funcs))
+          let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n")
+                                          ([0..] `L.zip` (fst <$> funcs))
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
 
         Just (InsertSaveMsg n i f) -> do
-          funcs <- readTVarIO functions
-          atomically $ writeTVar functions (insertToN i (n, saveMsg f) funcs)
+          atomically $ modifyTVar functions (insertToN i (n, saveMsg f))
           logging logger INFO $ printf "[TCP]  Function %s : save message to file %s." n f
 
         Just (InsertModifyTopic n i t t') -> do
-          funcs <- readTVarIO functions
-          atomically $ writeTVar functions (insertToN i (n, modifyTopic t t') funcs)
+          atomically $ modifyTVar functions (insertToN i (n, modifyTopic t t'))
           logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
 
         Just (InsertModifyField n i fs v) -> do
-          funcs <- readTVarIO functions
-          atomically $ writeTVar functions (insertToN i (n, modifyField fs v) funcs)
+          atomically $ modifyTVar functions (insertToN i (n, modifyField fs v))
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
+
+        Just (DeleteFunc n i) -> do
+          atomically $ modifyTVar functions (deleteAtN i)
+          logging logger INFO $ printf "[TCP]  Function %s : delete the %d th function." n (show i)
 
         _                   -> return ()
 

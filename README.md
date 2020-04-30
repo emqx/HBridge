@@ -43,18 +43,18 @@ $ docker run -d --name emqx1885 -p 1885:1883 -p 8085:8083 -p 8885:8883 -p 8086:8
 $ stack test
 
 (in another console)
-$ stack exec -- HBridge-exe etc/config.json +RTS -T
+$ stack run -- --config etc/config.yaml +RTS -T
 ```
 
 In this example, there exists two MQTT brokers `B1` and `B2` and a TCP one `B3` that connects to the bridge. The bridge forwards messages from `B1` to `B2` and vice versa. `B3` sends plain messages and a request for listing processing functions in bridge to the bridge periodically.
 
-The running status can be found at `localhost:22333`.
+The running status can be found at `localhost:22333`. This is provided by `ekg` package. `+RTS -T` is not required if you do not need this function.
 
 ## Configuration
 
 **CAUTION**: This part is currently at very early stage and can change at any time.
 
-The configuration file is at `etc/` in `YAML` format. A default configuration file `etc/config.yaml` is provided also. A configuration file contains the following fields:
+The configuration file is at `etc/` in `YAML` format. A default configuration file `etc/config.yaml` is also provided. A configuration file contains the following fields:
 
 - `logFile`: Log file path.
 - `logLevel`: Log level, it can be one of `DEBUG`, `INFO`, `WARNING` and `ERROR`. Logs whose level is lower than it will not be recorded.
@@ -75,6 +75,8 @@ The `msgFuncs` field in configuration is a list of descriptions of message proce
 - A name of this function. It can be any string.
 - `tag`: Type of this function. It can be one of `SaveMsg`, `ModifyTopic` and `ModifyField`, and this list can contain more members later.
 - `contents`: A list representing arguments of certain functions. This can be found in definition of `MessageFuncs` in `Types.hs`.
+
+**Note that the order of functions counts.** This is because a message is proessed one by one from the first function.
 
 
 Besides write configuration file manually, you can also write several lines of code in `test/Spec.hs`. Then run

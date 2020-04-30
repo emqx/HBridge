@@ -43,6 +43,7 @@ dependencies:
 - network-run
 - net-mqtt
 - network-uri
+- optparse-applicative
 
 library:
   source-dirs: src
