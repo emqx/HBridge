@@ -14,6 +14,8 @@ module Extra
   , textToBL
   , insertToN
   , deleteAtN
+  , fwdTCPMessage
+  , recvTCPMessage
   ) where
 
 import           Types
@@ -24,9 +26,13 @@ import           Text.Printf
 import qualified Data.List            as L
 import qualified Data.HashMap.Strict  as HM
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BL
+import qualified Data.ByteString.Char8     as BSC (hPutStrLn)
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Control.Monad.Except
+import           System.IO
 import           Data.Aeson
 import           Network.MQTT.Client
 import           Network.MQTT.Types
@@ -141,3 +147,17 @@ deleteAtN n xs
     in case p2 of
          []     -> p1
          (_:ys) -> p1 ++ ys
+
+
+-- | Forward message to certain broker. Broker-dependent and will be
+-- replaced soon.
+fwdTCPMessage :: Handle -> Message -> IO ()
+fwdTCPMessage h msg = do
+  BSC.hPutStrLn h $ BL.toStrict (encode msg)
+
+-- | Receive message from certain broker. Broker-dependent and will be
+-- replaced soon.
+recvTCPMessage :: Handle -> IO (Maybe Message)
+recvTCPMessage h = do
+  s <- BS.hGetLine h
+  return $ decode (BL.fromStrict s)

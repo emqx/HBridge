@@ -65,10 +65,11 @@ data Message = PlainMsg { payload :: Text
                         }
              | PubPkt PublishRequest BrokerName
              | ListFuncs
+             | ListFuncsAck [String]
              | InsertSaveMsg String Int FilePath
              | InsertModifyTopic String Int Topic Topic
              | InsertModifyField String Int [Text] Value
-             | DeleteFunc String Int
+             | DeleteFunc Int
              deriving (Show, Generic)
 
 deriving instance FromJSON URIAuth

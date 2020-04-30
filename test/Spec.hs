@@ -114,10 +114,11 @@ main = do
   --writeConfig
   brokerArgs <- getBrokerArgs
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
+      tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
-  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "test/tcp/msg" logger) tcpArgs
+  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "test/tcp/msg" logger) tcpArgs'
   a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) ((\(_,b,c) -> (b,c)) <$> mqttArgs)
 
   wait a1
@@ -141,9 +142,10 @@ runBroker host port topic logger = do
       let msg' = encode msg
       BS.hPutStrLn h $ BSL.toStrict msg'
 
-      let msg2 = ListFuncs
-          msg2' = encode msg2
-      BS.hPutStrLn h $ BSL.toStrict msg2'
+      -- ListFuncs
+      --let msg2 = ListFuncs
+      --    msg2' = encode msg2
+      --BS.hPutStrLn h $ BSL.toStrict msg2'
 
       logging logger INFO $ printf "[%s:%s] [TCP] Sent     [%s]" host port (unpack . decodeUtf8 . BSL.toStrict $ msg')
       threadDelay 3000000

@@ -8,9 +8,6 @@ module Main where
 import qualified Data.List                 as L
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust)
-import qualified Data.ByteString           as BS
-import qualified Data.ByteString.Lazy      as BL
-import qualified Data.ByteString.Char8     as BSC (hPutStrLn)
 import           Text.Printf
 import           System.IO
 import           Control.Monad
@@ -20,7 +17,6 @@ import           Control.Monad.Except
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
-import           Data.Aeson
 import           System.Remote.Monitoring
 import           Network.MQTT.Types
 import           Network.MQTT.Client
@@ -120,6 +116,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
   where
     (fwds, subs) = fromJust (Map.lookup n rules)
     mp = fromJust (Map.lookup n mountPoints)
+
     receiving ch logger = forever $ do
       msg <- recvTCPMessage h
       logging logger INFO $ printf "[TCP]  Received    [%s]." (show msg)
@@ -142,6 +139,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n")
                                           ([0..] `L.zip` (fst <$> funcs))
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
+          fwdTCPMessage h (ListFuncsAck items)
 
         Just (InsertSaveMsg n i f) -> do
           atomically $ modifyTVar functions (insertToN i (n, saveMsg f))
@@ -155,9 +153,9 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           atomically $ modifyTVar functions (insertToN i (n, modifyField fs v))
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
-        Just (DeleteFunc n i) -> do
+        Just (DeleteFunc i) -> do
           atomically $ modifyTVar functions (deleteAtN i)
-          logging logger INFO $ printf "[TCP]  Function %s : delete the %d th function." n (show i)
+          logging logger INFO $ printf "[TCP]  Function : delete the %d th function." i
 
         _                   -> return ()
 
@@ -169,17 +167,3 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           fwdTCPMessage h msg'
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg')
         _            -> return ()
-
-
--- | Forward message to certain broker. Broker-dependent and will be
--- replaced soon.
-fwdTCPMessage :: Handle -> Message -> IO ()
-fwdTCPMessage h msg = do
-  BSC.hPutStrLn h $ BL.toStrict (encode msg)
-
--- | Receive message from certain broker. Broker-dependent and will be
--- replaced soon.
-recvTCPMessage :: Handle -> IO (Maybe Message)
-recvTCPMessage h = do
-  s <- BS.hGetLine h
-  return $ decode (BL.fromStrict s)

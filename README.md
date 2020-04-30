@@ -31,24 +31,42 @@ HBridge also provides some extra features:
 
 ## Build and Test
 
+### Build
 To build from source, haskell build tool `stack` is required. Type
 ```
 $ stack build
 ```
 
+### Test
+
 There is a very simple test program in `test/Spec.hs`. To run the test with default configuration, it requires several MQTT brokers at running status. We recommend `EMQ X` broker:
 ```
 $ docker run -d --name emqx1883 -p 1883:1883 -p 8083:8083 -p 8883:8883 -p 8084:8084 -p 18083:18083 emqx/emqx
 $ docker run -d --name emqx1885 -p 1885:1883 -p 8085:8083 -p 8885:8883 -p 8086:8084 -p 18085:18083 emqx/emqx
-$ stack test
-
-(in another console)
-$ stack run -- --config etc/config.yaml +RTS -T
 ```
 
-In this example, there exists two MQTT brokers `B1` and `B2` and a TCP one `B3` that connects to the bridge. The bridge forwards messages from `B1` to `B2` and vice versa. `B3` sends plain messages and a request for listing processing functions in bridge to the bridge periodically.
+A TCP server is optional for monitoring and controlling the state of the bridge. A minimal one is provided at `app/monitor`. Note that the first TCP broker in the configuration file is reserved for this usage. To run it, just execute
+```
+$ stack run -- monitor --host=localhost --port=19192
+```
+Port `19192` is the port of the first TCP broker in default configuration file.
+
+Then run the test program:
+```
+$ stack test
+```
+
+Now the main program can be executed:
+```
+$ stack run -- HBridge --config etc/config.yaml +RTS -T
+```
+
+In this example, there exists two MQTT brokers `B1` and `B2` and a TCP one `B3` that connects to the bridge. The bridge forwards messages from `B1` to `B2` and vice versa. `B3` sends plain messages to the bridge periodically.
 
 The running status can be found at `localhost:22333`. This is provided by `ekg` package. `+RTS -T` is not required if you do not need this function.
+
+After the connections are established, it is possible to run commands in the `monitor` console. It only supports few commands such as listing and modifying processing functions in bridge. You can type `<TAB>` for completions. **Note that this function is at very early stage.**
+
 
 ## Configuration
 
