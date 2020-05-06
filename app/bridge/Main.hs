@@ -1,11 +1,15 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Main where
 
 import qualified Data.List                 as L
+import           Data.Text
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust)
 import           Text.Printf
@@ -17,12 +21,108 @@ import           Control.Monad.Except
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
+import           Control.Exception
 import           System.Remote.Monitoring
 import           Network.MQTT.Types
 import           Network.MQTT.Client
 import           Types
 import           Extra
 import           Environment
+
+import           Data.Aeson                (encode)
+import           Yesod                     hiding (Env)
+import           Yesod.Core
+import           Network.HTTP.Types
+import           Network.Wai
+
+
+{-
+data App = App
+
+instance Yesod App
+
+mkYesod "App" [parseRoutes|
+/#Env FuncsR GET
+|]
+
+getFuncsR :: Env -> HandlerFor App TypedContent
+getFuncsR Env{..} = respondSource "application/json" $ do
+  funcs <- liftIO . readTVarIO $ functions envBridge
+  --return (fst <$> funcs)
+  sendChunkLBS $ encode (fst <$> funcs)
+-}
+
+{- Yesod Example
+
+data Person = Person { name :: String, age :: Int }
+data Post = Post { pname :: Text
+                 , content :: Text
+                 , likes :: Int
+                 } deriving (Show, Generic, FromJSON, ToJSON)
+data App = App
+
+mkYesod "App" [parseRoutes|
+/funcs HomeR GET
+/func  PostR POST
+|]
+
+instance Yesod App
+
+getHomeR :: Handler TypedContent
+getHomeR = selectRep $ do
+    provideRep $ return
+        [shamlet|
+            <p>Hello, my name is #{name} and I am #{age} years old.
+        |]
+
+    provideRep $ return $ object
+        [ "name" .= name
+        , "age" .= age
+        ]
+  where
+    name = "Michael" :: Text
+    age = 28 :: Int
+
+postPostR :: Handler Value
+postPostR = do
+  post <- requireCheckJsonBody :: Handler Post
+  sendStatusJSON created201 (object ["id" .= Number 123])
+
+main :: IO ()
+main = warp 3000 App
+-}
+
+
+{- Yesod Example with IO
+
+data App = App
+instance Yesod App
+
+mkYesod "App" [parseRoutes|
+/ HomeR GET
+|]
+
+getHomeR :: HandlerFor App TypedContent
+getHomeR = respondSource "text/plain" $ do
+    sendChunkBS "Starting streaming response.\n"
+    sendChunkText "Performing some I/O.\n"
+    sendFlush
+    -- pretend we're performing some I/O
+    liftIO $ threadDelay 1000000
+    sendChunkBS "I/O performed, here are some results.\n"
+    forM_ [1..50 :: Int] $ \i -> do
+        sendChunk $ fromByteString "Got the value: " <>
+                    fromShow i <>
+                    fromByteString "\n"
+
+-}
+
+
+
+
+
+
+-----------
 
 main :: IO ()
 main = do

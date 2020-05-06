@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1ff5358c0ae1fb4b0a70e8e93d8f4cd38ccd1d9f2f21bb96f1d0afc9e5f11e0b
+-- hash: 99adb09514a2f62854e7278d6c9f9b6adfeef20b60be131057e280c759a6eeba
 
 name:           HBridge
 version:        0.0.1
@@ -39,6 +39,7 @@ library
     , containers
     , ekg
     , happstack-server
+    , http-types
     , mtl
     , net-mqtt
     , network
@@ -50,7 +51,10 @@ library
     , text
     , time
     , unordered-containers
+    , wai
     , yaml
+    , yesod
+    , yesod-core
   default-language: Haskell2010
 
 executable HBridge
@@ -70,6 +74,7 @@ executable HBridge
     , containers
     , ekg
     , happstack-server
+    , http-types
     , mtl
     , net-mqtt
     , network
@@ -81,7 +86,10 @@ executable HBridge
     , text
     , time
     , unordered-containers
+    , wai
     , yaml
+    , yesod
+    , yesod-core
   default-language: Haskell2010
 
 executable monitor
@@ -101,6 +109,7 @@ executable monitor
     , containers
     , ekg
     , happstack-server
+    , http-types
     , mtl
     , net-mqtt
     , network
@@ -112,7 +121,10 @@ executable monitor
     , text
     , time
     , unordered-containers
+    , wai
     , yaml
+    , yesod
+    , yesod-core
   default-language: Haskell2010
 
 test-suite HBridge-test
@@ -133,6 +145,7 @@ test-suite HBridge-test
     , containers
     , ekg
     , happstack-server
+    , http-types
     , mtl
     , net-mqtt
     , network
@@ -145,5 +158,8 @@ test-suite HBridge-test
     , text
     , time
     , unordered-containers
+    , wai
     , yaml
+    , yesod
+    , yesod-core
   default-language: Haskell2010

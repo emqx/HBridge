@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-# resolver: lts-14.27
+# resolver: lts-12.16
 resolver: lts-15.7
 
 # User packages to be built.
@@ -42,7 +42,6 @@ extra-deps:
   - ekg-core-0.1.1.7
   - ekg-json-0.1.0.6
   - net-mqtt-0.6.2.3
-
 
   # - acme-missiles-0.3
 # - git: https://github.com/commercialhaskell/stack.git

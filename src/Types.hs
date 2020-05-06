@@ -182,6 +182,12 @@ data MessageFuncs = SaveMsg FilePath
                   | ModifyTopic Topic Topic
                   deriving (Show, Generic, FromJSON, ToJSON)
 
+data ASaveMsg = ASaveMsg FilePath
+              deriving (Show, Generic, FromJSON, ToJSON)
+data AModifyField = AModifyField [Text] Value
+                  deriving (Show, Generic, FromJSON, ToJSON)
+data AModifyTopic = AModifyTopic Topic Topic
+                  deriving (Show, Generic, FromJSON, ToJSON)
 
 ----------------------------------------------------------------------------------------------
 -- | Priority of log

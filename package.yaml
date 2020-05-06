@@ -45,6 +45,10 @@ dependencies:
 - network-uri
 - optparse-applicative
 - repline
+- http-types
+- wai
+- yesod
+- yesod-core
 
 library:
   source-dirs: src
