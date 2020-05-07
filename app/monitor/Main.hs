@@ -14,8 +14,8 @@ import Options.Applicative hiding (completer)
 import System.Console.Repline
 import Network.Socket
 import Network.Run.TCP
-import Types
-import Extra
+import Network.MQTT.Bridge.Types
+import Network.MQTT.Bridge.Extra
 
 type Repl a = HaskelineT IO a
 

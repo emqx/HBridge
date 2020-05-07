@@ -26,10 +26,8 @@ import           Data.Aeson
 import qualified Data.Yaml                 as Y
 import           Control.Concurrent
 import           Network.Run.TCP
-
-import           Types
-import           Extra
-
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Bridge.Extra
 import           Network.URI
 import           Network.MQTT.Types
 import           Network.MQTT.Client

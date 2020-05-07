@@ -5,7 +5,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Types
+module Network.MQTT.Bridge.Types
   ( BrokerName
   , FwdsTopics
   , SubsTopics
@@ -19,6 +19,9 @@ module Types
   , Priority(..)
   , Log(..)
   , Logger(..)
+  , MsgCounter(..)
+  , MsgNum(..)
+  , Metrics(..)
   , FuncSeries
 
   , parseConfig
@@ -30,6 +33,7 @@ module Types
   , runFuncSeries
   ) where
 
+import           Data.Int               (Int64)
 import qualified Data.List              as L
 import           Data.Map
 import           Data.Maybe             (isNothing, fromJust)
@@ -37,6 +41,7 @@ import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString.Lazy   as BL
 import           System.IO
+import           System.Metrics.Counter
 import           Text.Printf
 import           Data.Time
 import           Control.Exception
@@ -66,10 +71,21 @@ data Message = PlainMsg { payload :: Text
              | PubPkt PublishRequest BrokerName
              | ListFuncs
              | ListFuncsAck [String]
-             | InsertSaveMsg String Int FilePath
-             | InsertModifyTopic String Int Topic Topic
-             | InsertModifyField String Int [Text] Value
-             | DeleteFunc Int
+             | InsertSaveMsg { sName  :: String
+                             , sIndex :: Int
+                             , sFilePath :: FilePath
+                             }
+             | InsertModifyTopic { mtName  :: String
+                                 , mtIndex :: Int
+                                 , mtPat   :: Topic
+                                 , mtTop   :: Topic
+                                 }
+             | InsertModifyField { mfName   :: String
+                                 , mfIndex  :: Int
+                                 , mfFields :: [Text]
+                                 , mfValue  :: Value
+                                 }
+             | DeleteFunc { delIndex :: Int }
              deriving (Show, Generic)
 
 deriving instance FromJSON URIAuth
@@ -157,15 +173,27 @@ parseConfig = do
       <> progDesc "Run an instance of bridge with certain configuration file"
       <> header   "HBridge - a multi-way MQTT/TCP message bridge" )
 
+
+-- | Counter of messages
+data MsgCounter = MsgCounter
+  { mqttRecvCounter   :: Counter
+  , mqttFwdCounter    :: Counter
+  , tcpCtlRecvCounter :: Counter
+  , tcpMsgRecvCounter :: Counter
+  , tcpMsgFwdCounter  :: Counter
+  }
+
 -- | Bridge. It contains both dynamic (active connections to brokers
 -- and a broadcast channel) and static (topics) information.
 data Bridge = Bridge
-  { activeMQTT    :: TVar (Map BrokerName MQTTClient) -- ^ Active connections to MQTT brokers
+  { startTime     :: UTCTime -- ^ System start time
+  , activeMQTT    :: TVar (Map BrokerName MQTTClient) -- ^ Active connections to MQTT brokers
   , activeTCP     :: TVar (Map BrokerName Handle) -- ^ Active TCP connections
   , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- ^ Topic rules
   , mountPoints   :: Map BrokerName Topic -- ^ Mount points
   , broadcastChan :: TChan Message -- ^ Broadcast channel
   , functions     :: TVar [(String, Message -> FuncSeries Message)] -- ^ Processing functions
+  , counters      :: MsgCounter  -- ^ Counter of messages
   }
 
 -- | Environment. It describes the state of system.
@@ -180,13 +208,6 @@ data Env = Env
 data MessageFuncs = SaveMsg FilePath
                   | ModifyField [Text] Value
                   | ModifyTopic Topic Topic
-                  deriving (Show, Generic, FromJSON, ToJSON)
-
-data ASaveMsg = ASaveMsg FilePath
-              deriving (Show, Generic, FromJSON, ToJSON)
-data AModifyField = AModifyField [Text] Value
-                  deriving (Show, Generic, FromJSON, ToJSON)
-data AModifyTopic = AModifyTopic Topic Topic
                   deriving (Show, Generic, FromJSON, ToJSON)
 
 ----------------------------------------------------------------------------------------------
@@ -252,6 +273,25 @@ logProcess Logger{..} = do
     case h' <> dh' of
       Right h -> hPutStrLn h s
       _       -> return ()
+
+----------------------------------------------------------------------------------------------
+-- | Num of messages. Read from counters.
+data MsgNum = MsgNum
+  { mqttRecvNum   :: Int64
+  , mqttFwdNum    :: Int64
+  , tcpCtlRecvNum :: Int64
+  , tcpMsgRecvNum :: Int64
+  , tcpMsgFwdNum  :: Int64
+  } deriving (Show, Generic, FromJSON, ToJSON)
+
+-- | Metrics information.
+data Metrics = Metrics
+  { version :: String
+  , sysTime :: UTCTime
+  , runningTime :: String -- NominalDiffTime
+  , sysMsgNum   :: MsgNum
+  , runningBrokers :: [Broker]
+  } deriving (Show, Generic, FromJSON, ToJSON)
 
 ----------------------------------------------------------------------------------------------
 -- | Monad that describes message processing stage.

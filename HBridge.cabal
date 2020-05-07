@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 99adb09514a2f62854e7278d6c9f9b6adfeef20b60be131057e280c759a6eeba
+-- hash: d320fa8dcb278cf5753ab98781e4ba9723fb6639ca60ea28e13c9022f005e966
 
 name:           HBridge
 version:        0.0.1
@@ -23,9 +23,10 @@ extra-source-files:
 
 library
   exposed-modules:
-      Environment
-      Extra
-      Types
+      Network.MQTT.Bridge.Environment
+      Network.MQTT.Bridge.Extra
+      Network.MQTT.Bridge.RestAPI
+      Network.MQTT.Bridge.Types
   other-modules:
       Paths_HBridge
   hs-source-dirs:
@@ -38,8 +39,8 @@ library
     , bytestring
     , containers
     , ekg
+    , ekg-core
     , happstack-server
-    , http-types
     , mtl
     , net-mqtt
     , network
@@ -47,14 +48,15 @@ library
     , network-uri
     , optparse-applicative
     , repline
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
     , wai
+    , warp
     , yaml
-    , yesod
-    , yesod-core
   default-language: Haskell2010
 
 executable HBridge
@@ -73,8 +75,8 @@ executable HBridge
     , bytestring
     , containers
     , ekg
+    , ekg-core
     , happstack-server
-    , http-types
     , mtl
     , net-mqtt
     , network
@@ -82,14 +84,15 @@ executable HBridge
     , network-uri
     , optparse-applicative
     , repline
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
     , wai
+    , warp
     , yaml
-    , yesod
-    , yesod-core
   default-language: Haskell2010
 
 executable monitor
@@ -108,8 +111,8 @@ executable monitor
     , bytestring
     , containers
     , ekg
+    , ekg-core
     , happstack-server
-    , http-types
     , mtl
     , net-mqtt
     , network
@@ -117,14 +120,15 @@ executable monitor
     , network-uri
     , optparse-applicative
     , repline
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
     , wai
+    , warp
     , yaml
-    , yesod
-    , yesod-core
   default-language: Haskell2010
 
 test-suite HBridge-test
@@ -144,8 +148,8 @@ test-suite HBridge-test
     , bytestring
     , containers
     , ekg
+    , ekg-core
     , happstack-server
-    , http-types
     , mtl
     , net-mqtt
     , network
@@ -154,12 +158,13 @@ test-suite HBridge-test
     , optparse-applicative
     , random
     , repline
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
     , wai
+    , warp
     , yaml
-    , yesod
-    , yesod-core
   default-language: Haskell2010

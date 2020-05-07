@@ -2,14 +2,17 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE QuasiQuotes       #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeOperators #-}
+
 
 module Main where
 
+import           Prelude                   hiding (read)
 import qualified Data.List                 as L
-import           Data.Text
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust)
 import           Text.Printf
@@ -21,108 +24,15 @@ import           Control.Monad.Except
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
-import           Control.Exception
-import           System.Remote.Monitoring
+import           System.Remote.Monitoring  hiding (Server)
+import           System.Metrics.Counter
 import           Network.MQTT.Types
 import           Network.MQTT.Client
-import           Types
-import           Extra
-import           Environment
-
-import           Data.Aeson                (encode)
-import           Yesod                     hiding (Env)
-import           Yesod.Core
-import           Network.HTTP.Types
-import           Network.Wai
-
-
-{-
-data App = App
-
-instance Yesod App
-
-mkYesod "App" [parseRoutes|
-/#Env FuncsR GET
-|]
-
-getFuncsR :: Env -> HandlerFor App TypedContent
-getFuncsR Env{..} = respondSource "application/json" $ do
-  funcs <- liftIO . readTVarIO $ functions envBridge
-  --return (fst <$> funcs)
-  sendChunkLBS $ encode (fst <$> funcs)
--}
-
-{- Yesod Example
-
-data Person = Person { name :: String, age :: Int }
-data Post = Post { pname :: Text
-                 , content :: Text
-                 , likes :: Int
-                 } deriving (Show, Generic, FromJSON, ToJSON)
-data App = App
-
-mkYesod "App" [parseRoutes|
-/funcs HomeR GET
-/func  PostR POST
-|]
-
-instance Yesod App
-
-getHomeR :: Handler TypedContent
-getHomeR = selectRep $ do
-    provideRep $ return
-        [shamlet|
-            <p>Hello, my name is #{name} and I am #{age} years old.
-        |]
-
-    provideRep $ return $ object
-        [ "name" .= name
-        , "age" .= age
-        ]
-  where
-    name = "Michael" :: Text
-    age = 28 :: Int
-
-postPostR :: Handler Value
-postPostR = do
-  post <- requireCheckJsonBody :: Handler Post
-  sendStatusJSON created201 (object ["id" .= Number 123])
-
-main :: IO ()
-main = warp 3000 App
--}
-
-
-{- Yesod Example with IO
-
-data App = App
-instance Yesod App
-
-mkYesod "App" [parseRoutes|
-/ HomeR GET
-|]
-
-getHomeR :: HandlerFor App TypedContent
-getHomeR = respondSource "text/plain" $ do
-    sendChunkBS "Starting streaming response.\n"
-    sendChunkText "Performing some I/O.\n"
-    sendFlush
-    -- pretend we're performing some I/O
-    liftIO $ threadDelay 1000000
-    sendChunkBS "I/O performed, here are some results.\n"
-    forM_ [1..50 :: Int] $ \i -> do
-        sendChunk $ fromByteString "Got the value: " <>
-                    fromShow i <>
-                    fromByteString "\n"
-
--}
-
-
-
-
-
-
------------
+import           Network.Wai.Handler.Warp
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Environment
+import           Network.MQTT.Bridge.RestAPI
 
 main :: IO ()
 main = do
@@ -134,6 +44,8 @@ main = do
       env' <- runReaderT newEnv1 conf
       env@(Env bridge _ logger) <- execStateT newEnv2 env'
       forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
+
+      async (run 8999 (apiApp env))
 
       initMCs <- readTVarIO (activeMQTT bridge)
       logging logger INFO $ "Connected to brokers:\n" ++ L.intercalate "\n" (Map.keys initMCs)
@@ -182,6 +94,7 @@ runMQTT (n, mc) (Env Bridge{..} _ logger) = do
       case msg of
         PubPkt p n' -> when ((blToText (_pubTopic p)) `existMatch` subs && n /= n') $ do
           logging logger INFO $ printf "Forwarded   [%s] from %s to %s." (show msg) n' n
+          inc (mqttFwdCounter counters)
           pubAliased mc (blToText $ _pubTopic p) (_pubBody p) (_pubRetain p) (_pubQoS p) (_pubProps p)
         _            -> return ()
 
@@ -223,6 +136,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
       case msg of
 
         Just (PlainMsg _ t) -> do
+          inc (tcpMsgRecvCounter counters)
           when (t `existMatch` fwds) $ do
             funcs' <- readTVarIO functions
             let funcs = snd <$> funcs'
@@ -235,6 +149,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
                 return ()
 
         Just ListFuncs -> do
+          inc (tcpCtlRecvCounter counters)
           funcs <- readTVarIO functions
           let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n")
                                           ([0..] `L.zip` (fst <$> funcs))
@@ -242,18 +157,22 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           fwdTCPMessage h (ListFuncsAck items)
 
         Just (InsertSaveMsg n i f) -> do
+          inc (tcpCtlRecvCounter counters)
           atomically $ modifyTVar functions (insertToN i (n, saveMsg f))
           logging logger INFO $ printf "[TCP]  Function %s : save message to file %s." n f
 
         Just (InsertModifyTopic n i t t') -> do
+          inc (tcpCtlRecvCounter counters)
           atomically $ modifyTVar functions (insertToN i (n, modifyTopic t t'))
           logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
 
         Just (InsertModifyField n i fs v) -> do
+          inc (tcpCtlRecvCounter counters)
           atomically $ modifyTVar functions (insertToN i (n, modifyField fs v))
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
         Just (DeleteFunc i) -> do
+          inc (tcpCtlRecvCounter counters)
           atomically $ modifyTVar functions (deleteAtN i)
           logging logger INFO $ printf "[TCP]  Function : delete the %d th function." i
 
@@ -266,4 +185,5 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           let msg' = msg{payload = mp `composeMP` t}
           fwdTCPMessage h msg'
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg')
+          inc (tcpMsgFwdCounter counters)
         _            -> return ()

@@ -4,7 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Environment
+module Network.MQTT.Bridge.Environment
   ( getHandle
   , getMQTTClient
   , newEnv1
@@ -15,7 +15,9 @@ import qualified Data.List               as L
 import           Data.Map                as Map
 import           Data.Maybe              (isNothing, fromJust)
 import           Data.Either             (isLeft, isRight)
+import           Data.Time
 import           System.IO
+import           System.Metrics.Counter
 import           Text.Printf
 import           Network.Socket
 import           Network.URI
@@ -26,8 +28,8 @@ import           Control.Monad.Except
 import           Control.Concurrent.STM
 import           Network.MQTT.Client
 import           Network.MQTT.Types
-import           Types
-import           Extra
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Bridge.Extra
 
 
 -- | Create a TCP connection and return the handle with broker name.
@@ -75,6 +77,8 @@ getMQTTClient callbackFunc = do
 -- | Create basic bridge environment without connections created.
 newEnv1 :: ReaderT Config IO Env
 newEnv1 = do
+  time                      <- liftIO getCurrentTime
+  [mqrc,mqfc,tctlc,trc,tfc] <- liftIO $ replicateM 5 new
   conf@(Config bs _ _ _ fs) <- ask
   logger                    <- liftIO $ mkLogger conf
   ch                        <- liftIO newBroadcastTChanIO
@@ -84,8 +88,9 @@ newEnv1 = do
 
   let rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
       mps   = Map.fromList [(brokerName b, brokerMount b) | b <- bs]
+      cnts  = MsgCounter mqrc mqfc tctlc trc tfc
   return $ Env
-    { envBridge = Bridge activeMCs activeTCPs rules mps ch funcs
+    { envBridge = Bridge time activeMCs activeTCPs rules mps ch funcs cnts
     , envConfig = conf
     , envLogger = logger
     }
@@ -99,6 +104,7 @@ newEnv2 = do
       mps = mountPoints bridge
       callbackFunc n mc pubReq = do
         logging logger INFO $ printf "Received    [%s]." (show $ PubPkt pubReq n)
+        inc (mqttRecvCounter (counters bridge))
 
         -- message transformation
         funcs' <- readTVarIO (functions bridge)

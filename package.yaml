@@ -40,15 +40,19 @@ dependencies:
 - aeson
 - yaml
 - ekg
+- ekg-core
 - network-run
 - net-mqtt
 - network-uri
 - optparse-applicative
 - repline
-- http-types
+#- http-types
 - wai
-- yesod
-- yesod-core
+- warp
+- servant
+- servant-server
+#- yesod
+#- yesod-core
 
 library:
   source-dirs: src

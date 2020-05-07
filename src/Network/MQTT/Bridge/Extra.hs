@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards     #-}
 
-module Extra
+module Network.MQTT.Bridge.Extra
   ( existMatch
   , parseMsgFuncs
   , saveMsg
@@ -17,8 +17,6 @@ module Extra
   , fwdTCPMessage
   , recvTCPMessage
   ) where
-
-import           Types
 
 import           Data.Text
 import           Data.Text.Encoding
@@ -37,7 +35,7 @@ import           Data.Aeson
 import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.MQTT.Topic
-
+import           Network.MQTT.Bridge.Types
 
 
 -- | Check if there exists a topic in the list that the given one can match.
