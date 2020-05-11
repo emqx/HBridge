@@ -146,6 +146,11 @@ deleteAtN n xs
          []     -> p1
          (_:ys) -> p1 ++ ys
 
+{-
+-- | Remove elements of a list from another one.
+subtractList :: (Eq a) => [a] -> [a] -> [a]
+subtractList l s = L.filter (\x -> not (x `L.elem` s)) l
+-}
 
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.

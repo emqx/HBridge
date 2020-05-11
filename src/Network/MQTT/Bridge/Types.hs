@@ -65,26 +65,30 @@ type SubsTopics  = [Topic]
 
 -- | Message type. The payload part is in 'Text'
 -- type currently but can be modified soon.
-data Message = PlainMsg { payload :: Text
-                        , topic   :: Topic
-                        }
+data Message = PlainMsg
+               { payload :: Text
+               , topic   :: Topic
+               }
              | PubPkt PublishRequest BrokerName
              | ListFuncs
              | ListFuncsAck [String]
-             | InsertSaveMsg { sName  :: String
-                             , sIndex :: Int
-                             , sFilePath :: FilePath
-                             }
-             | InsertModifyTopic { mtName  :: String
-                                 , mtIndex :: Int
-                                 , mtPat   :: Topic
-                                 , mtTop   :: Topic
-                                 }
-             | InsertModifyField { mfName   :: String
-                                 , mfIndex  :: Int
-                                 , mfFields :: [Text]
-                                 , mfValue  :: Value
-                                 }
+             | InsertSaveMsg
+               { sName  :: String
+               , sIndex :: Int
+               , sFilePath :: FilePath
+               }
+             | InsertModifyTopic
+               { mtName  :: String
+               , mtIndex :: Int
+               , mtPat   :: Topic
+               , mtTop   :: Topic
+               }
+             | InsertModifyField
+               { mfName   :: String
+               , mfIndex  :: Int
+               , mfFields :: [Text]
+               , mfValue  :: Value
+               }
              | DeleteFunc { delIndex :: Int }
              deriving (Show, Generic)
 
