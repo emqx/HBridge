@@ -16,6 +16,7 @@ import qualified Data.List                 as L
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust)
 import           Data.Either               (isLeft, isRight)
+import           Data.Tuple.Extra          (thd3)
 import           Text.Printf
 import           System.IO
 import           Control.Monad
@@ -57,7 +58,8 @@ main = do
       mapM_ (`processMQTT` env) (Map.toList initMCs)
       mapM_ (`processTCP` env) (Map.toList initTCPs)
 
-      forkFinally (forever $ maintainConns True True env) (\e -> logging logger WARNING "Connection maintaining thread failed.")
+      forkFinally (forever $ maintainConns True True env)
+        (\e -> logging logger WARNING "Connection maintaining thread failed.")
 
       forever getChar
       return ()
@@ -83,7 +85,7 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
 
   -- MQTT
   when (not (L.null missedMQNs) && warnFlag) $
-    logging logger WARNING $ printf "\n\nMissed MQTT connections: %s . Retrying...\n\n" (show missedMQNs)
+    logging logger WARNING $ printf "Missed MQTT connections: %s . Retrying..." (show missedMQNs)
 
   tups1' <- mapM (runReaderT (runExceptT (getMQTTClient (callbackFunc env)))) missedMQs
   mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups1')
@@ -96,7 +98,8 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
 
   -- TCP
   when (not (L.null missedTCPNs) && warnFlag) $
-    logging logger WARNING $ printf "\n\nMissed TCP connections: %s . Retrying...\n\n" (show missedTCPNs)
+    logging logger WARNING $
+      printf "Lost TCP connections: %s . Retrying..." (show missedTCPNs)
   tups2' <- mapM (runReaderT (runExceptT getHandle)) missedTCPs
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
   let tups2 = [t | (Right t) <- (L.filter isRight tups2')]
@@ -143,8 +146,7 @@ runMQTT (n, mc) env@(Env Bridge{..} conf logger) = do
     handleException e = case e of
         Left e -> do
           atomically $ modifyTVar activeMQTT (Map.delete n)
-          logging logger WARNING $ printf "MQTT broker %s disconnected : %s\n" n (show e)
-          logging logger WARNING "\n\n\n\n\n xxxx \n\n\n\n\n"
+          logging logger WARNING $ printf "MQTT broker %s disconnected : %s" n (show e)
         _     -> return ()
 
 
@@ -160,7 +162,7 @@ processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
     handleException e = case e of
         Left e -> do
           atomically $ modifyTVar activeTCP (Map.delete n)
-          logging logger WARNING $ printf "[TCP]  Broker %s disconnected (%s)\n" n (show e)
+          logging logger WARNING $ printf "[TCP]  Broker %s disconnected (%s)" n (show e)
           hClose h
         _     -> return ()
 
@@ -188,7 +190,7 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           inc (tcpMsgRecvCounter counters)
           when (t `existMatch` fwds) $ do
             funcs' <- readTVarIO functions
-            let funcs = snd <$> funcs'
+            let funcs = thd3 <$> funcs'
             ((msg', s), l) <- runFuncSeries (fromJust msg) funcs
             case msg' of
               Left e -> logging logger WARNING "[TCP]  Message transformation failed."
@@ -200,24 +202,27 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
         Just ListFuncs -> do
           inc (tcpCtlRecvCounter counters)
           funcs <- readTVarIO functions
-          let (items :: [String]) = L.map (\(i,s) -> show i ++ " " ++ s ++ "\n")
-                                          ([0..] `L.zip` (fst <$> funcs))
+          let (items :: [String]) =
+                [printf "%d [%s]: %s\n" i n (show f') | ((i :: Int), (n,f',_)) <- [0..] `zip` funcs]
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
           fwdTCPMessage h (ListFuncsAck items)
 
         Just (InsertSaveMsg n i f) -> do
           inc (tcpCtlRecvCounter counters)
-          atomically $ modifyTVar functions (insertToN i (n, saveMsg f))
+          let f' = SaveMsg f
+          atomically $ modifyTVar functions (insertToN i (n,f',saveMsg f))
           logging logger INFO $ printf "[TCP]  Function %s : save message to file %s." n f
 
         Just (InsertModifyTopic n i t t') -> do
           inc (tcpCtlRecvCounter counters)
-          atomically $ modifyTVar functions (insertToN i (n, modifyTopic t t'))
+          let f' = ModifyTopic t t'
+          atomically $ modifyTVar functions (insertToN i (n,f',modifyTopic t t'))
           logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
 
         Just (InsertModifyField n i fs v) -> do
           inc (tcpCtlRecvCounter counters)
-          atomically $ modifyTVar functions (insertToN i (n, modifyField fs v))
+          let f' = ModifyField fs v
+          atomically $ modifyTVar functions (insertToN i (n,f',modifyField fs v))
           logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
         Just (DeleteFunc i) -> do

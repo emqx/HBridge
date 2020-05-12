@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d320fa8dcb278cf5753ab98781e4ba9723fb6639ca60ea28e13c9022f005e966
+-- hash: 1f1a7cf814b862650f2f1486ee40dea413f779983f382383622c06dd285ebecb
 
 name:           HBridge
 version:        0.0.1
@@ -40,6 +40,7 @@ library
     , containers
     , ekg
     , ekg-core
+    , extra
     , happstack-server
     , mtl
     , net-mqtt
@@ -76,6 +77,7 @@ executable HBridge
     , containers
     , ekg
     , ekg-core
+    , extra
     , happstack-server
     , mtl
     , net-mqtt
@@ -112,6 +114,7 @@ executable monitor
     , containers
     , ekg
     , ekg-core
+    , extra
     , happstack-server
     , mtl
     , net-mqtt
@@ -149,6 +152,7 @@ test-suite HBridge-test
     , containers
     , ekg
     , ekg-core
+    , extra
     , happstack-server
     , mtl
     , net-mqtt

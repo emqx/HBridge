@@ -17,6 +17,7 @@ import qualified Data.List               as L
 import           Data.Map                as Map
 import           Data.Maybe              (isNothing, fromJust)
 import           Data.Either             (isLeft, isRight)
+import           Data.Tuple.Extra        (fst3, snd3, thd3)
 import           Data.Time
 import           System.IO
 import           System.Metrics.Counter
@@ -35,13 +36,13 @@ import           Network.MQTT.Bridge.Extra
 
 
 -- | Create a TCP connection and return the handle with broker name.
--- It can catch exceptions when making a connection.
+-- It can catch exceptions when establishing a connection.
 getHandle :: ExceptT String (ReaderT Broker IO) (BrokerName, Handle)
 getHandle = do
   b@(Broker n t uris _ _ _) <- ask
 
   let uri   = fromJust (parseURI uris)
-      host' = uriRegName <$> uriAuthority uri
+      host' = uriRegName       <$> uriAuthority uri
       port' = L.tail . uriPort <$> uriAuthority uri
 
   when (isNothing host' || isNothing port') $
@@ -54,12 +55,12 @@ getHandle = do
     connect sock $ addrAddress addr
     socketToHandle sock ReadWriteMode
   case h' of
-    Left e -> throwError $
-              printf "Failed to connect to %s (%s) : %s."
-                     n (show uri) (show e)
+    Left e  -> throwError $
+               printf "Failed to connect to %s (%s) : %s."
+                      n (show uri) (show e)
     Right h -> return (n, h)
 
-
+-- | LowLevelCallback type with extra broker name information. For internal useage.
 type LowLevelCallbackType = BrokerName -> MQTTClient -> PublishRequest -> IO ()
 
 -- | Create a MQTT connection and return the client with broker name.
@@ -73,8 +74,8 @@ getMQTTClient callback = do
   (mc' :: Either SomeException MQTTClient) <- liftIO . try $ do
     connectURI mqttConfig{_msgCB = LowLevelCallback (callback n)} uri
   case mc' of
-    Left e -> throwError $
-              printf "Failed to connect to %s (%s) : %s." n (show uri) (show e)
+    Left e   -> throwError $
+                printf "Failed to connect to %s (%s) : %s." n (show uri) (show e)
     Right mc -> return (n, mc)
 
 -- | Create basic bridge environment without connections created.
@@ -87,7 +88,7 @@ newEnv1 = do
   ch                        <- liftIO newBroadcastTChanIO
   activeMCs                 <- liftIO $ newTVarIO Map.empty
   activeTCPs                <- liftIO $ newTVarIO Map.empty
-  funcs                     <- liftIO $ newTVarIO [(n, parseMsgFuncs f) | (n, f) <- fs]
+  funcs                     <- liftIO $ newTVarIO [(n,f,parseMsgFuncs f) | (n, f) <- fs]
 
   let rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
       mps   = Map.fromList [(brokerName b, brokerMount b) | b <- bs]
@@ -108,7 +109,7 @@ callbackFunc Env{..} n mc pubReq = do
   funcs' <- readTVarIO (functions envBridge)
   let ch = broadcastChan envBridge
       mps = mountPoints envBridge
-      funcs = snd <$> funcs'
+      funcs = thd3 <$> funcs'
       mp = fromJust (Map.lookup n mps)
   ((msg', s), l) <- runFuncSeries (PubPkt pubReq n) funcs
   case msg' of

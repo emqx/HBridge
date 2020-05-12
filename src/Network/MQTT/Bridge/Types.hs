@@ -196,7 +196,7 @@ data Bridge = Bridge
   , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- ^ Topic rules
   , mountPoints   :: Map BrokerName Topic -- ^ Mount points
   , broadcastChan :: TChan Message -- ^ Broadcast channel
-  , functions     :: TVar [(String, Message -> FuncSeries Message)] -- ^ Processing functions
+  , functions     :: TVar [(String, MessageFuncs, Message -> FuncSeries Message)] -- ^ Processing functions
   , counters      :: MsgCounter  -- ^ Counter of messages
   }
 
