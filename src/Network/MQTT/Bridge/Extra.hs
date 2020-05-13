@@ -6,7 +6,6 @@
 module Network.MQTT.Bridge.Extra
   ( existMatch
   , parseMsgFuncs
-  , saveMsg
   , modifyField
   , modifyTopic
   , composeMP
@@ -43,11 +42,12 @@ existMatch :: Topic -> [Topic] -> Bool
 existMatch t ts =  True `elem` [pat `match` t | pat <- ts]
 
 parseMsgFuncs :: MessageFuncs -> Message -> FuncSeries Message
-parseMsgFuncs (SaveMsg fp) = saveMsg fp
+--parseMsgFuncs (SaveMsg fp) = saveMsg fp
 parseMsgFuncs (ModifyField fs v) = modifyField fs v
 parseMsgFuncs (ModifyTopic pat t') = modifyTopic pat t'
 
 
+{-
 -- | Save a message to file. For any type of message.
 saveMsg :: FilePath -> Message -> FuncSeries Message
 saveMsg f msg = do
@@ -55,6 +55,8 @@ saveMsg f msg = do
   modify (+ 1)
   log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
   return msg
+-}
+
 
 -- | Modify certain field of payload. For PlainMsg and PubPkt types.
 modifyField :: [Text] -> Value -> Message -> FuncSeries Message

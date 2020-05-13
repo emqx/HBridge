@@ -32,4 +32,13 @@ brokers:
   brokerFwds:
   - home/ac/temp
   connectType: TCPConnection
+- brokerSubs:
+  - home/#
+  brokerName: broker4
+  brokerMount: ''
+  brokerURI: tcp://localhost:19193
+  brokerFwds:
+  - home/room/temp
+  - home/#
+  connectType: TCPConnection
 logToStdErr: true

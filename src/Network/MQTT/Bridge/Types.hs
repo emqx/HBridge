@@ -204,8 +204,7 @@ data Env = Env
 
 
 -- | Functions for processing messages. New members may be added at any time.
-data MessageFuncs = SaveMsg FilePath
-                  | ModifyField [Text] Value
+data MessageFuncs = ModifyField [Text] Value
                   | ModifyTopic Topic Topic
                   deriving (Show, Generic, FromJSON, ToJSON)
 

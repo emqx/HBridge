@@ -55,7 +55,7 @@ myBroker4 = Broker "broker4" TCPConnection
             [t1, t3] [t3] ""
 
 myConfig  = Config
-  { brokers =  [myBroker1, myBroker2, myBroker3]
+  { brokers =  [myBroker1, myBroker2, myBroker3, myBroker4]
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
@@ -106,7 +106,7 @@ genPlainMsg (h, p) t = do
 main :: IO ()
 main = do
   logger <- mkLogger myConfig
-  forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
+  forkFinally (logProcess logger) (\e -> printf "[Warning] Log service failed : %s." (show e))
   --writeConfig
   brokerArgs <- getBrokerArgs
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
@@ -116,7 +116,6 @@ main = do
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
   a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "test/tcp/msg" logger) tcpArgs'
   a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) ((\(_,b,c) -> (b,c)) <$> mqttArgs)
-
   wait a1
   wait a2
 
@@ -155,13 +154,13 @@ runBroker host port topic logger = do
 v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
 v2 = Object $ HM.fromList [("v11", Number 1919810), ("v12", String "v12v12v12")]
 
-f1 = saveMsg "save1.txt"
+--f1 = saveMsg "save1.txt"
 f2 = modifyTopic "home/+/temp" "home/temp"
-f3 = saveMsg "save2.txt"
+--f3 = saveMsg "save2.txt"
 f4 = modifyField ["payloadHost"] v1
-f5 = saveMsg "save3.txt"
+--f5 = saveMsg "save3.txt"
 f6 = modifyField ["payloadHost", "v1"] v2
-fs = [f1, f2, f3, f4, f5, f6]
+fs = [f2, f4, f6]
 
 m1 = PlainMsg "msg1" "home/room/temp"
 gm = genPlainMsg ("localhost", "19199") "home/room/temp"
