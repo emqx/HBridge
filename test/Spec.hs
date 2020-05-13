@@ -59,9 +59,7 @@ myConfig  = Config
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
-  , msgFuncs = [ ("SaveMsg_1", SaveMsg "save1.txt")
-               , ("ModifyTopic_1", ModifyTopic "office/#" "mountpoint_on_recv_office/office/light")
-               , ("saveMsg_2", SaveMsg "save2.txt")
+  , msgFuncs = [  ("ModifyTopic_1", ModifyTopic "office/#" "mountpoint_on_recv_office/office/light")
                ]
   }
 

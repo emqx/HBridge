@@ -43,10 +43,6 @@ httpServer Env{..} = getFuncs
     postFuncs :: Message -> Handler String
     postFuncs msg = do
       case msg of
-        InsertSaveMsg n i f -> do
-          let f' = SaveMsg f
-          liftIO . atomically $ modifyTVar (functions envBridge) (insertToN i (n,f',saveMsg f))
-          return "OK"
         InsertModifyField n i fs v -> do
           let f' = ModifyField fs v
           liftIO . atomically $ modifyTVar (functions envBridge) (insertToN i (n,f',modifyField fs v))

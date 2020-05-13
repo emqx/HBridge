@@ -72,11 +72,6 @@ data Message = PlainMsg
              | PubPkt PublishRequest BrokerName
              | ListFuncs
              | ListFuncsAck [String]
-             | InsertSaveMsg
-               { sName  :: String
-               , sIndex :: Int
-               , sFilePath :: FilePath
-               }
              | InsertModifyTopic
                { mtName  :: String
                , mtIndex :: Int

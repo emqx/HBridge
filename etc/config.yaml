@@ -1,17 +1,11 @@
 logFile: test.log
-logLevel: WARNING
+logLevel: INFO
 msgFuncs:
-- - SaveMsg_1
-  - tag: SaveMsg
-    contents: save1.txt
 - - ModifyTopic_1
   - tag: ModifyTopic
     contents:
     - office/#
     - mountpoint_on_recv_office/office/light
-- - saveMsg_2
-  - tag: SaveMsg
-    contents: save2.txt
 brokers:
 - brokerSubs:
   - mountpoint_office/mountpoint_on_recv_office/office/+
@@ -35,15 +29,6 @@ brokers:
   brokerName: broker3
   brokerMount: ''
   brokerURI: tcp://localhost:19192
-  brokerFwds:
-  - home/ac/temp
-  connectType: TCPConnection
-- brokerSubs:
-  - home/+/temp
-  - home/#
-  brokerName: broker4
-  brokerMount: ''
-  brokerURI: tcp://localhost:19193
   brokerFwds:
   - home/ac/temp
   connectType: TCPConnection

@@ -40,7 +40,7 @@ optionsP = ConnOptions
 
 cmdList :: [String]
 cmdList = [ "listFuncs"    , "insertModifyTopic", "insertModifyField"
-          , "insertSaveMsg", "deleteFunc"
+          , "deleteFunc"
           ]
 
 -- Eval
@@ -64,12 +64,6 @@ cmd h input
           (fs :: [Text]) = read fs'
           (v :: Value) = read v'
       liftIO $ fwdTCPMessage h (InsertModifyField n i fs v)
-  | "insertSaveMsg" `L.isPrefixOf` input = do
-      n  <- liftIO getLine
-      i' <- liftIO getLine
-      f  <- liftIO getLine
-      let (i :: Int) = read i'
-      liftIO $ fwdTCPMessage h (InsertSaveMsg n i f)
   | "deleteFunc" `L.isPrefixOf` input = do
       i' <- liftIO getLine
       let (i :: Int) = read i'

@@ -207,12 +207,6 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
           fwdTCPMessage h (ListFuncsAck items)
 
-        Just (InsertSaveMsg n i f) -> do
-          inc (tcpCtlRecvCounter counters)
-          let f' = SaveMsg f
-          atomically $ modifyTVar functions (insertToN i (n,f',saveMsg f))
-          logging logger INFO $ printf "[TCP]  Function %s : save message to file %s." n f
-
         Just (InsertModifyTopic n i t t') -> do
           inc (tcpCtlRecvCounter counters)
           let f' = ModifyTopic t t'
