@@ -24,11 +24,9 @@ import qualified Data.List            as L
 import qualified Data.HashMap.Strict  as HM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString           as BS
-import qualified Data.ByteString.Lazy      as BL
 import qualified Data.ByteString.Char8     as BSC (hPutStrLn)
 import           Control.Monad.State
 import           Control.Monad.Writer
-import           Control.Monad.Except
 import           System.IO
 import           Data.Aeson
 import           Network.MQTT.Client

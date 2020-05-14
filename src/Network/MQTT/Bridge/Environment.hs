@@ -17,7 +17,7 @@ import qualified Data.List               as L
 import           Data.Map                as Map
 import           Data.Maybe              (isNothing, fromJust)
 import           Data.Either             (isLeft, isRight)
-import           Data.Tuple.Extra        (fst3, snd3, thd3)
+import           Data.Tuple.Extra        (thd3)
 import           Data.Time
 import           System.IO
 import           System.Metrics.Counter

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1f1a7cf814b862650f2f1486ee40dea413f779983f382383622c06dd285ebecb
+-- hash: 0978432f267c319e59da95d094e8bd26c140a4f22a491f8db1627b8e918b83ac
 
 name:           HBridge
 version:        0.0.1
@@ -26,6 +26,13 @@ library
       Network.MQTT.Bridge.Environment
       Network.MQTT.Bridge.Extra
       Network.MQTT.Bridge.RestAPI
+      Network.MQTT.Bridge.SQL.AbsESQL
+      Network.MQTT.Bridge.SQL.ErrM
+      Network.MQTT.Bridge.SQL.LexESQL
+      Network.MQTT.Bridge.SQL.ParESQL
+      Network.MQTT.Bridge.SQL.PrintESQL
+      Network.MQTT.Bridge.SQL.SkelESQL
+      Network.MQTT.Bridge.SQL.TestESQL
       Network.MQTT.Bridge.Types
   other-modules:
       Paths_HBridge
@@ -34,6 +41,7 @@ library
   default-extensions: OverloadedStrings
   build-depends:
       aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
@@ -71,6 +79,7 @@ executable HBridge
   build-depends:
       HBridge
     , aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
@@ -108,6 +117,7 @@ executable monitor
   build-depends:
       HBridge
     , aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
@@ -146,6 +156,7 @@ test-suite HBridge-test
   build-depends:
       HBridge
     , aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring

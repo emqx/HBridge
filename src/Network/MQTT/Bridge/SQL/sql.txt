@@ -1,0 +1,8 @@
+SELECT temp AS t, humidity, location AS l
+WHERE temp > 25.0,
+      humidity < 85,
+      topic =~ "home/#"
+MODIFY topic TO "home/summary",
+       QoS    TO 2,
+       retain TO True,
+       temp TO 20.0

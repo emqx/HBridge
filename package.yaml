@@ -28,6 +28,7 @@ default-extensions: OverloadedStrings
 dependencies:
 - base >= 4.12 && < 5
 - extra
+- array
 - text
 - time
 - bytestring
