@@ -15,9 +15,8 @@ module Network.MQTT.Bridge.Environment
 
 import qualified Data.List               as L
 import           Data.Map                as Map
-import           Data.Maybe              (isNothing, fromJust)
+import           Data.Maybe              (isNothing, isJust, fromJust)
 import           Data.Either             (isLeft, isRight)
-import           Data.Tuple.Extra        (thd3)
 import           Data.Time
 import           System.IO
 import           System.Metrics.Counter
@@ -83,21 +82,24 @@ newEnv1 :: ReaderT Config IO Env
 newEnv1 = do
   time                      <- liftIO getCurrentTime
   [mqrc,mqfc,tctlc,trc,tfc] <- liftIO $ replicateM 5 new
-  conf@(Config bs _ _ _ fs) <- ask
+  conf@(Config bs _ _ _ sqls) <- ask
   logger                    <- liftIO $ mkLogger conf
   ch                        <- liftIO newBroadcastTChanIO
   activeMCs                 <- liftIO $ newTVarIO Map.empty
   activeTCPs                <- liftIO $ newTVarIO Map.empty
-  funcs                     <- liftIO $ newTVarIO [(n,f,parseMsgFuncs f) | (n, f) <- fs]
+  fs'                       <- liftIO $ mapM parseSQLFile sqls
+  funcs                     <- liftIO $ newTVarIO [(sql,fromJust f') | (sql,f') <- sqls `zip` fs', isJust f']
 
   let rules = Map.fromList [(brokerName b, (brokerFwds b, brokerSubs b)) | b <- bs]
       mps   = Map.fromList [(brokerName b, brokerMount b) | b <- bs]
       cnts  = MsgCounter mqrc mqfc tctlc trc tfc
+
   return $ Env
     { envBridge = Bridge time activeMCs activeTCPs rules mps ch funcs cnts
     , envConfig = conf
     , envLogger = logger
     }
+
 
 
 callbackFunc :: Env -> LowLevelCallbackType
@@ -109,7 +111,7 @@ callbackFunc Env{..} n mc pubReq = do
   funcs' <- readTVarIO (functions envBridge)
   let ch = broadcastChan envBridge
       mps = mountPoints envBridge
-      funcs = thd3 <$> funcs'
+      funcs = snd <$> funcs'
       mp = fromJust (Map.lookup n mps)
   ((msg', s), l) <- runFuncSeries (PubPkt pubReq n) funcs
   case msg' of

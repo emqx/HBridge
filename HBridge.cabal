@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0978432f267c319e59da95d094e8bd26c140a4f22a491f8db1627b8e918b83ac
+-- hash: 763266551403c01c05ef591f1770a2bc89f0bbbbb9631165a07b5c371b8d1a1a
 
 name:           HBridge
 version:        0.0.1
@@ -32,7 +32,6 @@ library
       Network.MQTT.Bridge.SQL.ParESQL
       Network.MQTT.Bridge.SQL.PrintESQL
       Network.MQTT.Bridge.SQL.SkelESQL
-      Network.MQTT.Bridge.SQL.TestESQL
       Network.MQTT.Bridge.Types
   other-modules:
       Paths_HBridge
@@ -57,6 +56,7 @@ library
     , network-uri
     , optparse-applicative
     , repline
+    , scientific
     , servant
     , servant-server
     , stm
@@ -95,6 +95,7 @@ executable HBridge
     , network-uri
     , optparse-applicative
     , repline
+    , scientific
     , servant
     , servant-server
     , stm
@@ -133,6 +134,7 @@ executable monitor
     , network-uri
     , optparse-applicative
     , repline
+    , scientific
     , servant
     , servant-server
     , stm
@@ -173,6 +175,7 @@ test-suite HBridge-test
     , optparse-applicative
     , random
     , repline
+    , scientific
     , servant
     , servant-server
     , stm

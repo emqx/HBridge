@@ -15,7 +15,6 @@ module Network.MQTT.Bridge.Types
   , Config(..)
   , Bridge(..)
   , Env(..)
-  , MessageFuncs(..)
   , Priority(..)
   , Log(..)
   , Logger(..)
@@ -37,6 +36,7 @@ import           Data.Int               (Int64)
 import qualified Data.List              as L
 import           Data.Map
 import           Data.Maybe             (isNothing, fromJust)
+import           Data.Semigroup         ((<>))
 import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString.Lazy   as BL
@@ -72,20 +72,22 @@ data Message = PlainMsg
              | PubPkt PublishRequest BrokerName
              | ListFuncs
              | ListFuncsAck [String]
-             | InsertModifyTopic
-               { mtName  :: String
-               , mtIndex :: Int
-               , mtPat   :: Topic
-               , mtTop   :: Topic
-               }
-             | InsertModifyField
-               { mfName   :: String
-               , mfIndex  :: Int
-               , mfFields :: [Text]
-               , mfValue  :: Value
-               }
              | DeleteFunc { delIndex :: Int }
              deriving (Show, Generic)
+
+
+instance Ord Value where
+  (Object _) <= (Object _) = True
+  (Array _) <= (Array _) = True
+  (String s1) <= (String s2) = s1 <= s2
+  (Number n1) <= (Number n2) = n1 <= n2
+  (Bool b1) <= (Bool b2) = b1 <= b2
+
+instance Semigroup Value where
+  v1 <> v2 = v1
+
+deriving instance Read QoS
+deriving instance Ord QoS
 
 deriving instance FromJSON URIAuth
 deriving instance ToJSON URIAuth
@@ -140,7 +142,7 @@ data Config = Config
   , logToStdErr :: Bool
   , logFile     :: FilePath
   , logLevel    :: Priority
-  , msgFuncs    :: [(String, MessageFuncs)]
+  , sqlFiles    :: [FilePath]
   } deriving (Show, Generic, FromJSON, ToJSON)
 
 configP :: Parser String
@@ -191,7 +193,7 @@ data Bridge = Bridge
   , rules         :: Map BrokerName (FwdsTopics, SubsTopics) -- ^ Topic rules
   , mountPoints   :: Map BrokerName Topic -- ^ Mount points
   , broadcastChan :: TChan Message -- ^ Broadcast channel
-  , functions     :: TVar [(String, MessageFuncs, Message -> FuncSeries Message)] -- ^ Processing functions
+  , functions     :: TVar [(FilePath, Message -> FuncSeries Message)] -- ^ Processing functions
   , counters      :: MsgCounter  -- ^ Counter of messages
   }
 
@@ -201,12 +203,6 @@ data Env = Env
   , envConfig :: Config
   , envLogger :: Logger
   }
-
-
--- | Functions for processing messages. New members may be added at any time.
-data MessageFuncs = ModifyField [Text] Value
-                  | ModifyTopic Topic Topic
-                  deriving (Show, Generic, FromJSON, ToJSON)
 
 ----------------------------------------------------------------------------------------------
 -- | Priority of log

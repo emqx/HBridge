@@ -16,7 +16,6 @@ import qualified Data.List                 as L
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromJust)
 import           Data.Either               (isLeft, isRight)
-import           Data.Tuple.Extra          (thd3)
 import           Text.Printf
 import           System.IO
 import           Control.Monad
@@ -188,36 +187,18 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
 
         Just (PlainMsg _ t) -> do
           inc (tcpMsgRecvCounter counters)
-          when (t `existMatch` fwds) $ do
-            funcs' <- readTVarIO functions
-            let funcs = thd3 <$> funcs'
-            ((msg', s), l) <- runFuncSeries (fromJust msg) funcs
-            case msg' of
-              Left e -> logging logger WARNING "[TCP]  Message transformation failed."
-              Right msg'' -> atomically $ do
-                writeTChan broadcastChan msg''
-                readTChan ch
-                return ()
+          when (t `existMatch` fwds) $ atomically $ do
+            writeTChan broadcastChan (fromJust msg)
+            readTChan ch
+            return ()
 
         Just ListFuncs -> do
           inc (tcpCtlRecvCounter counters)
           funcs <- readTVarIO functions
           let (items :: [String]) =
-                [printf "%d [%s]: %s\n" i n (show f') | ((i :: Int), (n,f',_)) <- [0..] `zip` funcs]
+                [printf "%d [%s]\n" i n | ((i :: Int), (n,_)) <- [0..] `zip` funcs]
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
           fwdTCPMessage h (ListFuncsAck items)
-
-        Just (InsertModifyTopic n i t t') -> do
-          inc (tcpCtlRecvCounter counters)
-          let f' = ModifyTopic t t'
-          atomically $ modifyTVar functions (insertToN i (n,f',modifyTopic t t'))
-          logging logger INFO $ printf "[TCP]  Function %s : modify topic %s to %s." n t t'
-
-        Just (InsertModifyField n i fs v) -> do
-          inc (tcpCtlRecvCounter counters)
-          let f' = ModifyField fs v
-          atomically $ modifyTVar functions (insertToN i (n,f',modifyField fs v))
-          logging logger INFO $ printf "[TCP]  Function %s : modify field %s to %s." n (show fs) (show v)
 
         Just (DeleteFunc i) -> do
           inc (tcpCtlRecvCounter counters)

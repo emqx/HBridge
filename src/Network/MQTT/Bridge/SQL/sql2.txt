@@ -1,1 +1,0 @@
-SELECT temp AS t, humidity, location AS l

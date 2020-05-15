@@ -39,31 +39,13 @@ optionsP = ConnOptions
 
 
 cmdList :: [String]
-cmdList = [ "listFuncs"    , "insertModifyTopic", "insertModifyField"
-          , "deleteFunc"
-          ]
+cmdList = [ "listFuncs", "deleteFunc"]
 
 -- Eval
 cmd :: Handle -> String -> Repl ()
 cmd h input
   | "listFuncs" `L.isPrefixOf` input = do
       liftIO $ fwdTCPMessage h ListFuncs
-  | "insertModifyTopic" `L.isPrefixOf` input = do
-      n    <- liftIO getLine
-      i'   <- liftIO getLine
-      oldt <- liftIO getLine
-      newt <- liftIO getLine
-      let (i :: Int) = read i'
-      liftIO $ fwdTCPMessage h (InsertModifyTopic n i (pack oldt) (pack newt))
-  | "insertModifyField" `L.isPrefixOf` input = do
-      n   <- liftIO getLine
-      i'  <- liftIO getLine
-      fs' <- liftIO getLine
-      v'  <- liftIO getLine
-      let (i :: Int) = read i'
-          (fs :: [Text]) = read fs'
-          (v :: Value) = read v'
-      liftIO $ fwdTCPMessage h (InsertModifyField n i fs v)
   | "deleteFunc" `L.isPrefixOf` input = do
       i' <- liftIO getLine
       let (i :: Int) = read i'

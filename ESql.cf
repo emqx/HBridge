@@ -42,9 +42,6 @@ VarBool. Var ::= Boolean ;
 
 EMod. Mod ::= Ident "TO" Var ;
 
-
---coercions Exp 2 ;
-
 {-
 SELECT (_ as _), _, _
 WHERE  topic =~ _,

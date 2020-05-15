@@ -38,19 +38,11 @@ httpServer Env{..} = getFuncs
     getFuncs :: Handler [String]
     getFuncs = do
       funcs <- liftIO . readTVarIO $ functions envBridge
-      return ["[ " ++ n ++ " ]: " ++ show f'| (n,f',f) <- funcs]
+      return ["[ " ++ n ++ " ]"| (n,_) <- funcs]
 
     postFuncs :: Message -> Handler String
     postFuncs msg = do
       case msg of
-        InsertModifyField n i fs v -> do
-          let f' = ModifyField fs v
-          liftIO . atomically $ modifyTVar (functions envBridge) (insertToN i (n,f',modifyField fs v))
-          return "OK"
-        InsertModifyTopic n i pat t -> do
-          let f' = ModifyTopic pat t
-          liftIO . atomically $ modifyTVar (functions envBridge) (insertToN i (n,f',modifyTopic pat t))
-          return "OK"
         DeleteFunc i -> do
           liftIO . atomically $ modifyTVar (functions envBridge) (deleteAtN i)
           return "OK"

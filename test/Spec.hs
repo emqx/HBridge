@@ -59,13 +59,23 @@ myConfig  = Config
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
-  , msgFuncs = [  ("ModifyTopic_1", ModifyTopic "office/#" "mountpoint_on_recv_office/office/light")
-               ]
+  , sqlFiles = ["etc/sql.txt"]
   }
 
 -- | Write config to file.
 writeConfig :: IO ()
 writeConfig = BS.writeFile "etc/config.yaml" (Y.encode myConfig)
+
+
+
+data Foo = Foo
+  { temp :: Double
+  , humidity :: Int
+  , location :: String
+  } deriving (Show, Generic, FromJSON, ToJSON)
+
+foo = Foo 27.5 70 "Hangzhou"
+msgBody = encode foo
 
 -- | Create a MQTT client and connect to a broker. Then
 -- send test message with certain topic continuously.
@@ -75,7 +85,7 @@ runMQTTClient uri' t = do
   mc <- connectURI mqttConfig uri
   subscribe mc [("#", subOptions)] []
   forever $ do
-    pubAliased mc t "TEST MESSAGE" False QoS0 []
+    pubAliased mc t msgBody False QoS0 []
     threadDelay 1000000
 
 -- | Generate broker arguments. For convenience, we assume
@@ -149,20 +159,3 @@ runBroker host port topic logger = do
       msg' <- BS.hGetLine h
       when (not (BS.null msg')) $
         logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (unpack . decodeUtf8 $ msg')
-
--- | Test message processing functions, temporarily for test only.
-v1 = Object $ HM.fromList [("v1", String "v1v1v1"), ("v2", Number 114514), ("v3", Bool True)]
-v2 = Object $ HM.fromList [("v11", Number 1919810), ("v12", String "v12v12v12")]
-
---f1 = saveMsg "save1.txt"
-f2 = modifyTopic "home/+/temp" "home/temp"
---f3 = saveMsg "save2.txt"
-f4 = modifyField ["payloadHost"] v1
---f5 = saveMsg "save3.txt"
-f6 = modifyField ["payloadHost", "v1"] v2
-fs = [f2, f4, f6]
-
-m1 = PlainMsg "msg1" "home/room/temp"
-gm = genPlainMsg ("localhost", "19199") "home/room/temp"
-
-test msg = runWriterT $ runStateT (runExceptT $ foldM (\acc f -> f acc) msg fs) 0

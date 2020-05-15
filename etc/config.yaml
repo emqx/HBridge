@@ -10,12 +10,8 @@ logToStdErr: true
 
 # Message processing functions.
 # A message will go through these functions one by one.
-msgFuncs:
-- - ModifyTopic_1
-  - tag: ModifyTopic
-    contents:
-    - office/#
-    - mountpoint_on_recv_office/office/light
+sqlFiles:
+- "etc/sql.txt"
 
 # Brokers. Each of them has following fields:
 # 1. brokerName: Name of the broker. It is a unique identifier of a broker.
