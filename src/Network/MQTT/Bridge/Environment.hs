@@ -82,7 +82,7 @@ newEnv1 :: ReaderT Config IO Env
 newEnv1 = do
   time                      <- liftIO getCurrentTime
   [mqrc,mqfc,tctlc,trc,tfc] <- liftIO $ replicateM 5 new
-  conf@(Config bs _ _ _ sqls) <- ask
+  conf@(Config bs _ _ _ _ sqls) <- ask
   logger                    <- liftIO $ mkLogger conf
   ch                        <- liftIO newBroadcastTChanIO
   activeMCs                 <- liftIO $ newTVarIO Map.empty

@@ -66,7 +66,7 @@ type SubsTopics  = [Topic]
 -- | Message type. The payload part is in 'Text'
 -- type currently but can be modified soon.
 data Message = PlainMsg
-               { payload :: Text
+               { payload :: BL.ByteString
                , topic   :: Topic
                }
              | PubPkt PublishRequest BrokerName
@@ -138,11 +138,12 @@ data Broker = Broker
 -- | Config of the bridge, it can be described by
 -- brokers it (will) connect to.
 data Config = Config
-  { brokers     :: [Broker]
-  , logToStdErr :: Bool
-  , logFile     :: FilePath
-  , logLevel    :: Priority
-  , sqlFiles    :: [FilePath]
+  { brokers      :: [Broker]
+  , logToStdErr  :: Bool
+  , logFile      :: FilePath
+  , logLevel     :: Priority
+  , crossForward :: Bool
+  , sqlFiles     :: [FilePath]
   } deriving (Show, Generic, FromJSON, ToJSON)
 
 configP :: Parser String

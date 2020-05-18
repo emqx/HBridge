@@ -8,6 +8,9 @@ logLevel: INFO
 # Whether to print log to screen.
 logToStdErr: true
 
+# Whether to forward MQTT messages to TCP brokers.
+crossForward: false
+
 # Message processing functions.
 # A message will go through these functions one by one.
 sqlFiles:
@@ -21,37 +24,46 @@ sqlFiles:
 # 5. brokerFwds: Topic list which the broker forwards. Only messages with matched topic will be sent from this broker to the bridge.
 # 6. brokerMount: Mountpoint of this broker. It will be added to the head of topic of messages that the bridge receive from the broker. This is mostly used for preventing message looping between brokers. The bridge provides no guarantee on loop-free property.
 brokers:
-- brokerSubs:
-  - mountpoint_office/mountpoint_on_recv_office/office/+
+-
   brokerName: broker1
-  brokerMount: mountpoint_home/
+  brokerMount: 'mountpoint_home/'
   brokerURI: mqtt://localhost:1883/mqtt
   brokerFwds:
-  - home/room/temp
+  - 'home/room/temp'
+  brokerSubs:
+  - 'mountpoint_office/mountpoint_on_recv_office/office/+'
   connectType: MQTTConnection
-- brokerSubs:
-  - mountpoint_home/home/#
+
+-
   brokerName: broker2
-  brokerMount: mountpoint_office/
+  brokerMount: 'mountpoint_office/'
   brokerURI: mqtt://localhost:1885/mqtt
   brokerFwds:
-  - office/light
+  - 'office/light'
+  brokerSubs:
+  - 'mountpoint_home/home/#'
   connectType: MQTTConnection
-- brokerSubs:
-  - home/+/temp
-  - home/#
+
+-
   brokerName: broker3
-  brokerMount: ''
+  brokerMount: 'mountpoint_tcp3/'
   brokerURI: tcp://localhost:19192
   brokerFwds:
-  - home/ac/temp
+  - 'tcp/#'
+  brokerSubs:
+  - 'home/+/temp'
+  - 'mountpoint_tcp4/#'
+  - 'mountpoint_home/#'
   connectType: TCPConnection
-- brokerSubs:
-  - home/#
+
+-
   brokerName: broker4
-  brokerMount: ''
+  brokerMount: 'mountpoint_tcp4/'
   brokerURI: tcp://localhost:19193
   brokerFwds:
-  - home/room/temp
-  - home/#
+  - 'home/room/temp'
+  - 'tcp/#'
+  brokerSubs:
+  - 'mountpoint_tcp3/#'
+  - 'mountpoint_office/#'
   connectType: TCPConnection

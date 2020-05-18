@@ -59,6 +59,7 @@ myConfig  = Config
   , logToStdErr = True
   , logFile = "test.log"
   , logLevel = INFO
+  , crossForward = True
   , sqlFiles = ["etc/sql.txt"]
   }
 
@@ -110,7 +111,7 @@ genPlainMsg :: (HostName, ServiceName) -> Topic -> IO Message
 genPlainMsg (h, p) t = do
     time <- getCurrentTime
     let payload = encode $ SamplePayload h p time
-    return (PlainMsg (decodeUtf8 (BSL.toStrict payload)) t)
+    return (PlainMsg payload t)
 
 
 main :: IO ()
@@ -120,11 +121,12 @@ main = do
   --writeConfig
   brokerArgs <- getBrokerArgs
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
-      tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
+      --tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
+      tcpArgs' = tcpArgs
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
-  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "test/tcp/msg" logger) tcpArgs'
+  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "tcp/test/msg" logger) tcpArgs'
   a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) ((\(_,b,c) -> (b,c)) <$> mqttArgs)
   wait a1
   wait a2

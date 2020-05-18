@@ -172,7 +172,7 @@ processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
 runTCP :: (BrokerName, Handle)
     -> Env
     -> IO ()
-runTCP (n, h) (Env Bridge{..} _ logger) = do
+runTCP (n, h) (Env Bridge{..} Config{..} logger) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch logger) (forwarding ch logger)
     return ()
@@ -185,12 +185,14 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
       logging logger INFO $ printf "[TCP]  Received    [%s]." (show msg)
       case msg of
 
-        Just (PlainMsg _ t) -> do
+        Just (PlainMsg p t) -> do
           inc (tcpMsgRecvCounter counters)
+          let msgMP = PlainMsg p (mp `composeMP` t)
           when (t `existMatch` fwds) $ atomically $ do
-            writeTChan broadcastChan (fromJust msg)
+            writeTChan broadcastChan msgMP
             readTChan ch
             return ()
+          logging logger INFO $ printf "[TCP]  Mountpoint added: [%s]." (show msgMP)
 
         Just ListFuncs -> do
           inc (tcpCtlRecvCounter counters)
@@ -211,8 +213,12 @@ runTCP (n, h) (Env Bridge{..} _ logger) = do
       msg <- atomically (readTChan ch)
       case msg of
         PlainMsg _ t -> when (t `existMatch` subs) $ do
-          let msg' = msg{payload = mp `composeMP` t}
-          fwdTCPMessage h msg'
-          logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg')
+          fwdTCPMessage h msg
+          logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
+          inc (tcpMsgFwdCounter counters)
+
+        PubPkt req@PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
+          fwdTCPMessage h msg
+          logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
         _            -> return ()
