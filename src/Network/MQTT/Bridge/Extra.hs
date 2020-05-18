@@ -1,6 +1,4 @@
-{-# LANGUAGE OverloadedStrings#-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards     #-}
 
@@ -18,7 +16,6 @@ module Network.MQTT.Bridge.Extra
 
 import           Data.Text
 import           Data.Text.Encoding
-import           Text.Printf
 import qualified Data.List             as L
 import qualified Data.Map              as Map
 import qualified Data.HashMap.Strict   as HM
@@ -26,15 +23,12 @@ import qualified Data.ByteString.Lazy  as BL
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BSC (hPutStrLn)
 import           Control.Exception
-import           Control.Monad.State
-import           Control.Monad.Writer
 import           System.IO
 import           Data.Aeson
 import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.MQTT.Topic
 import           Network.MQTT.Bridge.Types
-
 import           Network.MQTT.Bridge.SQL.SkelESQL
 import           Network.MQTT.Bridge.SQL.AbsESQL
 import           Network.MQTT.Bridge.SQL.ParESQL

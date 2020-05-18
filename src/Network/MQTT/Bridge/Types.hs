@@ -1,9 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE DeriveAnyClass      #-}
 
 module Network.MQTT.Bridge.Types
   ( BrokerName
@@ -36,8 +36,6 @@ import           Data.Int               (Int64)
 import qualified Data.List              as L
 import           Data.Map
 import           Data.Maybe             (isNothing, fromJust)
-import           Data.Semigroup         ((<>))
-import           Data.Text
 import           Data.Text.Encoding
 import qualified Data.ByteString.Lazy   as BL
 import           System.IO
@@ -63,7 +61,7 @@ type BrokerName  = String
 type FwdsTopics  = [Topic]
 type SubsTopics  = [Topic]
 
--- | Message type. The payload part is in 'Text'
+-- | Message type. The payload part is in 'ByteString'
 -- type currently but can be modified soon.
 data Message = PlainMsg
                { payload :: BL.ByteString

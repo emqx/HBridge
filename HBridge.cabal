@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 763266551403c01c05ef591f1770a2bc89f0bbbbb9631165a07b5c371b8d1a1a
+-- hash: 0a77d0c959b9677705b20eb0df38fffec2f52fc4fdb53a0baa04935468cf159a
 
 name:           HBridge
 version:        0.0.1
@@ -173,7 +173,6 @@ test-suite HBridge-test
     , network-run
     , network-uri
     , optparse-applicative
-    , random
     , repline
     , scientific
     , servant

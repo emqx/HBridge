@@ -49,16 +49,14 @@ dependencies:
 - network-uri
 - optparse-applicative
 - repline
-#- http-types
 - wai
 - warp
 - servant
 - servant-server
-#- yesod
-#- yesod-core
 
 library:
   source-dirs: src
+
 
 executables:
   HBridge:
@@ -93,4 +91,3 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - HBridge
-    - random

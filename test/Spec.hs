@@ -1,13 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE DeriveAnyClass      #-}
 
-import qualified Data.List as L
-import qualified Data.HashMap.Strict      as HM
-import           Data.Maybe (fromJust)
-import           Data.Either (fromRight)
+import qualified Data.List                as L
+import           Data.Maybe               (fromJust)
+import           Data.Either              (fromRight)
 import qualified Data.ByteString.Char8    as BS
 import qualified Data.ByteString.Lazy     as BSL
 import           Data.Text
@@ -16,9 +15,6 @@ import           Text.Printf
 import           Data.Time
 import           System.IO
 import           Control.Monad
-import           Control.Monad.State
-import           Control.Monad.Except
-import           Control.Monad.Writer
 import           Network.Socket
 import           Control.Concurrent.Async
 import           GHC.Generics
@@ -27,7 +23,6 @@ import qualified Data.Yaml                 as Y
 import           Control.Concurrent
 import           Network.Run.TCP
 import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Bridge.Extra
 import           Network.URI
 import           Network.MQTT.Types
 import           Network.MQTT.Client

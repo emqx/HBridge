@@ -9,20 +9,32 @@ logLevel: INFO
 logToStdErr: true
 
 # Whether to forward MQTT messages to TCP brokers.
-crossForward: false
+crossForward: true
 
 # Message processing functions.
 # A message will go through these functions one by one.
 sqlFiles:
-- "etc/sql.txt"
+- "etc/sql.sql"
 
 # Brokers. Each of them has following fields:
-# 1. brokerName: Name of the broker. It is a unique identifier of a broker.
-# 2. brokerURI: URI of the broker that the bridge will connect to.
-# 3. connectType: Type of connection of this broker. It can be one of MQTTConnection and TCPConnection.
-# 4. brokerSubs: Topic list which the broker subscribes. Only messages with matched topic will be forwarded to this broker.
-# 5. brokerFwds: Topic list which the broker forwards. Only messages with matched topic will be sent from this broker to the bridge.
-# 6. brokerMount: Mountpoint of this broker. It will be added to the head of topic of messages that the bridge receive from the broker. This is mostly used for preventing message looping between brokers. The bridge provides no guarantee on loop-free property.
+# - brokerName:  Name of the broker. It is a unique identifier of a broker.
+
+# - brokerURI:   URI of the broker that the bridge will connect to.
+
+# - connectType: Type of connection of this broker. It can be one of
+#                MQTTConnection and TCPConnection.
+
+# - brokerSubs:  Topic list which the broker subscribes. Only messages with
+#                matched topic will be forwarded to this broker.
+
+# - brokerFwds:  Topic list which the broker forwards. Only messages with
+#                matched topic will be sent from this broker to the bridge.
+
+# - brokerMount: Mountpoint of this broker. It will be added to the head of
+#                topic of messages that the bridge receive from the broker.
+#                This is mostly used for preventing message looping between brokers.
+#                The bridge provides NO guarantee on loop-free property.
+
 brokers:
 -
   brokerName: broker1
