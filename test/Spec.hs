@@ -10,21 +10,18 @@ import           Control.Monad
 import           Data.Aeson
 import qualified Data.ByteString.Char8     as BS
 import qualified Data.ByteString.Lazy      as BSL
-import           Data.Either               (fromRight)
+import           Data.Either               (isRight, fromRight)
 import qualified Data.List                 as L
 import           Data.Maybe                (fromJust)
-import           Data.Text
-import           Data.Text.Encoding
 import           Data.Time
 import qualified Data.Yaml                 as Y
 import           GHC.Generics
 import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.Run.TCP
-import           Network.Socket
+import           Network.Simple.TCP
+--import           Network.Socket
 import           Network.URI
-import           System.IO
 import           Text.Printf
 
 -- | Write test cases here.
@@ -119,6 +116,7 @@ main = do
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
       --tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
       tcpArgs' = L.init tcpArgs
+      --tcpArgs' = tcpArgs
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
@@ -134,26 +132,26 @@ runBroker :: HostName
           -> Logger
           -> IO ()
 runBroker host port topic logger = do
-  runTCPServer (Just host) port $ \s -> do
-    h <- socketToHandle s ReadWriteMode
-    race (receiving h logger) (sending h logger)
+  serve (Host host) port $ \(s, addr) -> do
+    race (receiving s logger) (sending s logger)
+    --forkFinally (sending s logger) (\e -> handleException e)
     return ()
   where
-    sending h logger = forever $ do
+    handleException e = do
+      case e of
+        Left e -> putStrLn $ "\n\n\n" ++ show e ++ "\n\n\n"
+        Right _ -> return ()
+
+    sending s logger = forever $ do
       -- PlainMsg
       msg <- genPlainMsg (host, port) topic
-      let msg' = encode msg
-      BS.hPutStrLn h $ BSL.toStrict msg'
-
-      -- ListFuncs
-      --let msg2 = ListFuncs
-      --    msg2' = encode msg2
-      --BS.hPutStrLn h $ BSL.toStrict msg2'
-
-      logging logger INFO $ printf "[%s:%s] [TCP] Sent     [%s]" host port (unpack . decodeUtf8 . BSL.toStrict $ msg')
+      sendBridgeMsg s msg
+      logging logger INFO $ printf "[%s:%s] [TCP] Sent     [%s]" host port (show msg)
       threadDelay 3000000
 
-    receiving h logger = forever $ do
-      msg' <- BS.hGetLine h
-      when (not (BS.null msg')) $
-        logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (unpack . decodeUtf8 $ msg')
+    receiving s logger = forever $ do
+      msg' <- recvBridgeMsg s 128
+      case msg' of
+        Nothing -> return ()
+        Just msg ->
+          logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (show msg)

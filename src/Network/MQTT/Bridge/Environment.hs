@@ -27,9 +27,8 @@ import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
 import           Network.MQTT.Types
-import           Network.Socket
+import           Network.Simple.TCP
 import           Network.URI
-import           System.IO
 import           System.Metrics.Counter
 import           Text.Printf
 
@@ -48,11 +47,7 @@ getSocket = do
     throwError $ printf "Invalid URI : %s ." (show uri)
 
   (s' :: Either SomeException Socket) <- liftIO . try $ do
-    addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
-                       host' port'
-    sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-    connect sock $ addrAddress addr
-    --socketToHandle sock ReadWriteMode
+    (sock,addr) <- connectSock (fromJust host') (fromJust port')
     return sock
   case s' of
     Left e  -> throwError $

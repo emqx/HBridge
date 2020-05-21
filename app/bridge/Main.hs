@@ -29,7 +29,7 @@ import           Network.MQTT.Bridge.RestAPI
 import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
 import           Network.MQTT.Types
-import           Network.Socket
+import           Network.Simple.TCP
 import           Network.Wai.Handler.Warp
 import           Prelude                         hiding (read)
 import           System.IO
@@ -164,7 +164,7 @@ processTCP tup@(n, s) env@(Env Bridge{..} _ logger) = do
         Left e -> do
           atomically $ modifyTVar activeTCP (Map.delete n)
           logging logger WARNING $ printf "[TCP]  Broker %s disconnected (%s)" n (show e)
-          close s
+          closeSock s
           return ()
         _     -> return ()
 
@@ -183,7 +183,8 @@ runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
   where
     handleException e = do
       case e of
-        Left e -> putStrLn $ "\n\n\n" ++ (show e) ++ "\n\n\n"
+        --Left e -> logging logger WARNING $ "\n\n\n" ++ show e ++ "\n\n\n"
+        Left e -> putStrLn $ "\n\n\n" ++ show e ++ "\n\n\n"
         Right _ -> return ()
 
     (fwds, subs) = fromJust (Map.lookup n rules)
@@ -224,12 +225,12 @@ runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
       --logging logger INFO $ printf "\n\nMSG: %s.\n\n" (show msg)
       case msg of
         PlainMsg _ t -> when (t `existMatch` subs) $ do
-          fwdTCPMessage' s msg
+          fwdTCPMessage s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
 
         PubPkt req@PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
-          fwdTCPMessage' s msg
+          fwdTCPMessage s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
         _            -> return ()

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: abf102d6f8b8924f1df46860a4036e573784dc6208ee0579e9ad7c9749ecd1d1
+-- hash: 6b90e3b151bb13a33fa29e5e3c94b868da548ea2948edf4d0c96f8cd82c216f6
 
 name:           HBridge
 version:        0.0.1
@@ -48,16 +48,12 @@ library
     , ekg
     , ekg-core
     , extra
-    , happstack-server
     , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
     , network-simple
     , network-uri
     , optparse-applicative
-    , repline
     , scientific
     , servant
     , servant-server
@@ -90,16 +86,12 @@ executable HBridge
     , ekg
     , ekg-core
     , extra
-    , happstack-server
     , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
     , network-simple
     , network-uri
     , optparse-applicative
-    , repline
     , scientific
     , servant
     , servant-server
@@ -133,16 +125,12 @@ test-suite HBridge-test
     , ekg
     , ekg-core
     , extra
-    , happstack-server
     , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
     , network-simple
     , network-uri
     , optparse-applicative
-    , repline
     , scientific
     , servant
     , servant-server

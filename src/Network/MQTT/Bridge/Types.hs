@@ -51,7 +51,8 @@ import           GHC.Generics
 import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.URI
-import           Network.Socket
+--import           Network.Socket
+import           Network.Simple.TCP
 import           Options.Applicative
 import           System.IO
 import           System.Metrics.Counter

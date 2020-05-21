@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BlockArguments      #-}
 
 module Network.MQTT.Bridge.Extra
   ( parseSQLFile
@@ -13,6 +14,8 @@ module Network.MQTT.Bridge.Extra
   , fwdTCPMessage
   , fwdTCPMessage'
   , recvTCPMessage
+  , recvBridgeMsg
+  , sendBridgeMsg
   ) where
 
 import           Control.Exception
@@ -36,7 +39,6 @@ import           Network.MQTT.Types
 import           Network.Simple.TCP               as TCP
 import qualified Network.HESP                     as HESP
 import qualified Data.Vector                      as V
-import           System.IO
 
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
@@ -283,24 +285,18 @@ subtractList l s = L.filter (\x -> not (x `L.elem` s)) l
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.
 fwdTCPMessage :: Socket -> Message -> IO ()
-fwdTCPMessage s msg = do
-  TCP.send s $ (BL.toStrict (encode msg))
+fwdTCPMessage = sendBridgeMsg
   --BSC.hPutStrLn h $ BL.toStrict (encode msg)
 
 -- | Receive message from certain broker. Broker-dependent and will be
 -- replaced soon.
 recvTCPMessage :: Socket -> Int -> IO (Maybe Message)
-recvTCPMessage s n = do
-  bs' <- TCP.recv s n
-  case bs' of
-    Nothing -> return Nothing
-    Just bs -> return $ decode (BL.fromStrict bs)
-
+recvTCPMessage = recvBridgeMsg
 
 
 pub :: BS.ByteString -> BS.ByteString -> HESP.Message
 pub topic payload =
-  let cs = [ HESP.mkBulkString "PUB"
+  let cs = [ HESP.mkBulkString "pub"
            , HESP.mkBulkString "<unique-id>"
 	   , HESP.mkBulkString topic
 	   , HESP.mkBulkString payload
@@ -310,13 +306,13 @@ pub topic payload =
 fwdTCPMessage' :: Socket -> Message -> IO ()
 fwdTCPMessage' s msg = do
   HESP.sendMsg s $ pub "test_topic" (BL.toStrict $ encode msg)
-
+  {-
   ack <- HESP.recvMsg s 1024
-  putStr $ "\n\n-> " ++ show ack ++ "\n\n"
+  putStr $ "\n-> " ++ show ack ++ "\n"
   case ack of
-    Left  e -> putStrLn $ "--> " ++ (show e)
-    Right r -> putStrLn $ "--> " ++ (show r) ++ " " ++ show msg ++ "\n\n"
-
+    Left  e -> putStrLn $ "--> " ++ show e
+    Right r -> putStrLn $ "--> " ++ show r ++ " " ++ show msg ++ "\n\n"
+  -}
 
   {-
   (s' :: Either SomeException BS.ByteString) <- try $ BS.hGetLine h
@@ -324,3 +320,21 @@ fwdTCPMessage' s msg = do
     Left _ -> return Nothing
     Right s -> if BS.null s then return Nothing else return $ decode (BL.fromStrict s)
   -}
+
+recvBridgeMsg :: Socket -> Int -> IO (Maybe Message)
+recvBridgeMsg s n = do
+  msg' <- HESP.recvMsg s n
+  case msg' of
+    Left _ -> return Nothing
+    Right msg ->
+      case msg of
+        HESP.MatchSimpleString bs -> return $ decode (BL.fromStrict bs)
+        _                         -> return Nothing
+
+sendBridgeMsg :: Socket -> Message -> IO ()
+sendBridgeMsg s msg = do
+  let bs  = (BL.toStrict $ encode msg)
+      msg' = HESP.mkSimpleString bs
+  case msg' of
+    Left _ -> return ()
+    Right msg -> HESP.sendMsg s msg
