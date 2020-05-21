@@ -2,27 +2,27 @@
 
 module Main where
 
-import qualified Data.List as L
-import Data.Text
-import Text.Printf
-import Control.Monad
-import Control.Monad.Trans
-import Control.Concurrent.Async (race)
-import System.IO
-import Data.Aeson
-import Options.Applicative hiding (completer)
-import System.Console.Repline
-import Network.Socket
-import Network.Run.TCP
-import Network.MQTT.Bridge.Types
-import Network.MQTT.Bridge.Extra
+import           Control.Concurrent.Async  (race)
+import           Control.Monad
+import           Control.Monad.Trans
+import           Data.Aeson
+import qualified Data.List                 as L
+import           Data.Text
+import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Types
+import           Network.Run.TCP
+import           Network.Socket
+import           Options.Applicative       hiding (completer)
+import           System.Console.Repline
+import           System.IO
+import           Text.Printf
 
 type Repl a = HaskelineT IO a
 
 data ConnOptions = ConnOptions
-  { host :: String
-  , port :: String
-  }
+    { host :: String
+    , port :: String
+    }
 
 optionsP :: Parser ConnOptions
 optionsP = ConnOptions
@@ -82,5 +82,5 @@ main = do
       msg <- recvTCPMessage h
       case msg of
         Just (ListFuncsAck items) -> putStrLn (L.concat items)
-        _ -> return ()
+        _                         -> return ()
       --when (not (BS.null msg')) (print msg')

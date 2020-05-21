@@ -1,43 +1,43 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances     #-}
 
 module Network.MQTT.Bridge.Environment
-  ( getHandle
+  ( getSocket
   , getMQTTClient
   , callbackFunc
   , newEnv1
   , newEnv2
   ) where
 
-import qualified Data.List               as L
-import           Data.Map                as Map
-import           Data.Maybe              (isNothing, isJust, fromJust)
-import           Data.Either             (isLeft, isRight)
+import           Control.Concurrent.STM
+import           Control.Exception
+import           Control.Monad.Except
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Either               (isLeft, isRight)
+import qualified Data.List                 as L
+import           Data.Map                  as Map
+import           Data.Maybe                (fromJust, isJust, isNothing)
 import           Data.Time
+import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Client
+import           Network.MQTT.Types
+import           Network.Socket
+import           Network.URI
 import           System.IO
 import           System.Metrics.Counter
 import           Text.Printf
-import           Network.Socket
-import           Network.URI
-import           Control.Exception
-import           Control.Monad.Reader
-import           Control.Monad.State
-import           Control.Monad.Except
-import           Control.Concurrent.STM
-import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Bridge.Extra
 
 
 -- | Create a TCP connection and return the handle with broker name.
 -- It can catch exceptions when establishing a connection.
-getHandle :: ExceptT String (ReaderT Broker IO) (BrokerName, Handle)
-getHandle = do
+getSocket :: ExceptT String (ReaderT Broker IO) (BrokerName, Socket)
+getSocket = do
   b@(Broker n t uris _ _ _) <- ask
 
   let uri   = fromJust (parseURI uris)
@@ -47,17 +47,18 @@ getHandle = do
   when (isNothing host' || isNothing port') $
     throwError $ printf "Invalid URI : %s ." (show uri)
 
-  (h' :: Either SomeException Handle) <- liftIO . try $ do
+  (s' :: Either SomeException Socket) <- liftIO . try $ do
     addr <- L.head <$> getAddrInfo (Just $ defaultHints {addrSocketType = Stream})
                        host' port'
     sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
     connect sock $ addrAddress addr
-    socketToHandle sock ReadWriteMode
-  case h' of
+    --socketToHandle sock ReadWriteMode
+    return sock
+  case s' of
     Left e  -> throwError $
                printf "Failed to connect to %s (%s) : %s."
                       n (show uri) (show e)
-    Right h -> return (n, h)
+    Right s -> return (n, s)
 
 -- | LowLevelCallback type with extra broker name information. For internal useage.
 type LowLevelCallbackType = BrokerName -> MQTTClient -> PublishRequest -> IO ()
@@ -152,7 +153,7 @@ newEnv2 = do
             subscribe mc (fwds `L.zip` L.repeat subOptions) []) tups1
 
   -- connect to TCP
-  tups2' <- liftIO $ mapM (runReaderT (runExceptT getHandle))
+  tups2' <- liftIO $ mapM (runReaderT (runExceptT getSocket))
                          (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
   let tups2 = [t | (Right t) <- (L.filter isRight tups2')]

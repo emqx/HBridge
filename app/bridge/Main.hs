@@ -1,39 +1,41 @@
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 
 
 module Main where
 
-import           Prelude                   hiding (read)
-import qualified Data.List                 as L
-import qualified Data.Map                  as Map
-import           Data.Maybe                (fromJust)
-import           Data.Either               (isLeft, isRight)
-import           Text.Printf
-import           System.IO
+import           Control.Concurrent
+import           Control.Concurrent.Async
+import           Control.Concurrent.STM
+import           Control.Exception
 import           Control.Monad
+import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Control.Monad.Except
-import           Control.Concurrent
-import           Control.Concurrent.STM
-import           Control.Concurrent.Async
-import           System.Remote.Monitoring  hiding (Server)
-import           System.Metrics.Counter
-import           Network.MQTT.Types
-import           Network.MQTT.Client
-import           Network.Wai.Handler.Warp
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Bridge.Extra
+import           Data.Either                     (isLeft, isRight)
+import qualified Data.List                       as L
+import qualified Data.Map                        as Map
+import           Data.Maybe                      (isJust, fromJust)
 import           Network.MQTT.Bridge.Environment
+import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.RestAPI
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Client
+import           Network.MQTT.Types
+import           Network.Socket
+import           Network.Wai.Handler.Warp
+import           Prelude                         hiding (read)
+import           System.IO
+import           System.Metrics.Counter
+import           System.Remote.Monitoring        hiding (Server)
+import           Text.Printf
 
 
 main :: IO ()
@@ -99,7 +101,7 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
   when (not (L.null missedTCPNs) && warnFlag) $
     logging logger WARNING $
       printf "Lost TCP connections: %s . Retrying..." (show missedTCPNs)
-  tups2' <- mapM (runReaderT (runExceptT getHandle)) missedTCPs
+  tups2' <- mapM (runReaderT (runExceptT getSocket)) missedTCPs
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
   let tups2 = [t | (Right t) <- (L.filter isRight tups2')]
   atomically $ modifyTVar activeTCP (Map.union (Map.fromList tups2))
@@ -151,10 +153,10 @@ runMQTT (n, mc) env@(Env Bridge{..} conf logger) = do
 
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain TCP connection.
-processTCP :: (BrokerName, Handle)
+processTCP :: (BrokerName, Socket)
         -> Env
         -> IO ()
-processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
+processTCP tup@(n, s) env@(Env Bridge{..} _ logger) = do
     forkFinally (runTCP tup env) (\e -> handleException e)
     return ()
   where
@@ -162,27 +164,35 @@ processTCP tup@(n, h) env@(Env Bridge{..} _ logger) = do
         Left e -> do
           atomically $ modifyTVar activeTCP (Map.delete n)
           logging logger WARNING $ printf "[TCP]  Broker %s disconnected (%s)" n (show e)
-          hClose h
+          close s
+          return ()
         _     -> return ()
 
 -- | Describes how the bridge receives and forwards messages
 -- from/to a certain TCP connection.
 -- It is bridge-scoped and does not care about specific behaviours
 -- of servers, which is provided by fwdTCPMessage' and 'recvTCPMessge'.
-runTCP :: (BrokerName, Handle)
+runTCP :: (BrokerName, Socket)
     -> Env
     -> IO ()
-runTCP (n, h) (Env Bridge{..} Config{..} logger) = do
+runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch logger) (forwarding ch logger)
+    --forkFinally (forwarding ch logger) (\e -> handleException e)
     return ()
   where
+    handleException e = do
+      case e of
+        Left e -> putStrLn $ "\n\n\n" ++ (show e) ++ "\n\n\n"
+        Right _ -> return ()
+
     (fwds, subs) = fromJust (Map.lookup n rules)
     mp = fromJust (Map.lookup n mountPoints)
 
     receiving ch logger = forever $ do
-      msg <- recvTCPMessage h
-      logging logger INFO $ printf "[TCP]  Received    [%s]." (show msg)
+      msg <- recvTCPMessage s 128
+      when (isJust msg) $
+        logging logger INFO $ printf "[TCP]  Received    [%s]." (show msg)
       case msg of
 
         Just (PlainMsg p t) -> do
@@ -200,7 +210,7 @@ runTCP (n, h) (Env Bridge{..} Config{..} logger) = do
           let (items :: [String]) =
                 [printf "%d [%s]\n" i n | ((i :: Int), (n,_)) <- [0..] `zip` funcs]
           logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
-          fwdTCPMessage h (ListFuncsAck items)
+          fwdTCPMessage s (ListFuncsAck items)
 
         Just (DeleteFunc i) -> do
           inc (tcpCtlRecvCounter counters)
@@ -211,14 +221,15 @@ runTCP (n, h) (Env Bridge{..} Config{..} logger) = do
 
     forwarding ch logger = forever $ do
       msg <- atomically (readTChan ch)
+      --logging logger INFO $ printf "\n\nMSG: %s.\n\n" (show msg)
       case msg of
         PlainMsg _ t -> when (t `existMatch` subs) $ do
-          fwdTCPMessage h msg
+          fwdTCPMessage' s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
 
         PubPkt req@PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
-          fwdTCPMessage h msg
+          fwdTCPMessage' s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
         _            -> return ()

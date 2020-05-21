@@ -29,6 +29,7 @@ dependencies:
 - base >= 4.12 && < 5
 - extra
 - array
+- vector
 - text
 - time
 - scientific
@@ -36,6 +37,7 @@ dependencies:
 - containers
 - unordered-containers
 - network
+- network-simple
 - stm
 - mtl
 - async
@@ -53,6 +55,7 @@ dependencies:
 - warp
 - servant
 - servant-server
+- hesp
 
 library:
   source-dirs: src
@@ -69,15 +72,15 @@ executables:
     dependencies:
     - HBridge
 
-  monitor:
-    main:                Main.hs
-    source-dirs:         app/monitor
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - HBridge
+#  monitor:
+#    main:                Main.hs
+#    source-dirs:         app/monitor
+#    ghc-options:
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
+#    dependencies:
+#    - HBridge
 
 
 

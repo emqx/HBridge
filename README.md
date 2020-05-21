@@ -9,7 +9,7 @@ HBridge is a MQTT bridge for forwarding messages of certain topics from one brok
 HBridge supports two types of connection:
 
 - MQTT connection: MQTT connection is the most-used type of connection for performing inter-broker MQTT message forwarding. It supports standard MQTT publishing messages.
-- Bare TCP connection: Although MQTT is (mostly) based on TCP connection, the bridge also supports bare TCP connection. For convenience, the one who connects to the bridge by TCP is also called "broker" no matter what it does. Messages from bare TCP connections can only be forwarded to other TCP ones. It supports following types of message:
+- Bare TCP connection: Although MQTT is (mostly) based on TCP connection, the bridge also supports bare TCP connection. For convenience, the one who connects to the bridge by TCP is also called "broker" no matter what it does. Messages from bare TCP connections can only be forwarded to other TCP ones (but it can receive messages from other MQTT brokers, which will be talked about later). It supports following types of message:
 
   + A simple type of message `PlainMsg` containing only a payload field in plain text and a topic. It is mostly used for testing purposes.
   + Several types of controll message, for controlling the internal state of the bridge.
@@ -22,7 +22,7 @@ The concept of the bridge is shown below:
 
 HBridge also provides some extra features:
 
-- Message processing: It means that HBridge can do some processing on the message. It currently provides following functions:
+- Message processing: It means that HBridge can do some processing on the message. It currently supports a simple `SQL`-like grammar, which can be found at [Configuration](#2-Configuration) part.
   + `saveMsg`: Save all messages to disk.
   + `modifyTopic`: Modify matched topic to a new one.
   + `modifyField`: Modify certain field of payload in a message to a new value (if the field exists).

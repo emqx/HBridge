@@ -1,31 +1,31 @@
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-import qualified Data.List                as L
-import           Data.Maybe               (fromJust)
-import           Data.Either              (fromRight)
-import qualified Data.ByteString.Char8    as BS
-import qualified Data.ByteString.Lazy     as BSL
+import           Control.Concurrent
+import           Control.Concurrent.Async
+import           Control.Monad
+import           Data.Aeson
+import qualified Data.ByteString.Char8     as BS
+import qualified Data.ByteString.Lazy      as BSL
+import           Data.Either               (fromRight)
+import qualified Data.List                 as L
+import           Data.Maybe                (fromJust)
 import           Data.Text
 import           Data.Text.Encoding
-import           Text.Printf
 import           Data.Time
-import           System.IO
-import           Control.Monad
-import           Network.Socket
-import           Control.Concurrent.Async
-import           GHC.Generics
-import           Data.Aeson
 import qualified Data.Yaml                 as Y
-import           Control.Concurrent
-import           Network.Run.TCP
+import           GHC.Generics
 import           Network.MQTT.Bridge.Types
-import           Network.URI
-import           Network.MQTT.Types
 import           Network.MQTT.Client
+import           Network.MQTT.Types
+import           Network.Run.TCP
+import           Network.Socket
+import           Network.URI
+import           System.IO
+import           Text.Printf
 
 -- | Write test cases here.
 t1 = "home/room/temp"
@@ -65,10 +65,11 @@ writeConfig = BS.writeFile "etc/config.yaml" (Y.encode myConfig)
 
 
 data Foo = Foo
-  { temp :: Double
-  , humidity :: Int
-  , location :: String
-  } deriving (Show, Generic, FromJSON, ToJSON)
+    { temp     :: Double
+    , humidity :: Int
+    , location :: String
+    }
+    deriving (Show, Generic, FromJSON, ToJSON)
 
 foo = Foo 27.5 70 "Hangzhou"
 msgBody = encode foo
@@ -95,11 +96,11 @@ getBrokerArgs = do
 
 -- | Sample payload type, for test only.
 data SamplePayload = SamplePayload
-  { payloadHost :: HostName
-  , payloadPort :: ServiceName
-  , payloadTime :: UTCTime
-  }
-  deriving (Show, Generic, FromJSON, ToJSON)
+    { payloadHost :: HostName
+    , payloadPort :: ServiceName
+    , payloadTime :: UTCTime
+    }
+    deriving (Show, Generic, FromJSON, ToJSON)
 
 -- | Generate plain message with time as payload for test purpose.
 genPlainMsg :: (HostName, ServiceName) -> Topic -> IO Message
@@ -117,7 +118,7 @@ main = do
   brokerArgs <- getBrokerArgs
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
       --tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
-      tcpArgs' = tcpArgs
+      tcpArgs' = L.init tcpArgs
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0a77d0c959b9677705b20eb0df38fffec2f52fc4fdb53a0baa04935468cf159a
+-- hash: abf102d6f8b8924f1df46860a4036e573784dc6208ee0579e9ad7c9749ecd1d1
 
 name:           HBridge
 version:        0.0.1
@@ -49,10 +49,12 @@ library
     , ekg-core
     , extra
     , happstack-server
+    , hesp
     , mtl
     , net-mqtt
     , network
     , network-run
+    , network-simple
     , network-uri
     , optparse-applicative
     , repline
@@ -63,6 +65,7 @@ library
     , text
     , time
     , unordered-containers
+    , vector
     , wai
     , warp
     , yaml
@@ -88,10 +91,12 @@ executable HBridge
     , ekg-core
     , extra
     , happstack-server
+    , hesp
     , mtl
     , net-mqtt
     , network
     , network-run
+    , network-simple
     , network-uri
     , optparse-applicative
     , repline
@@ -102,45 +107,7 @@ executable HBridge
     , text
     , time
     , unordered-containers
-    , wai
-    , warp
-    , yaml
-  default-language: Haskell2010
-
-executable monitor
-  main-is: Main.hs
-  other-modules:
-      Paths_HBridge
-  hs-source-dirs:
-      app/monitor
-  default-extensions: OverloadedStrings
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      HBridge
-    , aeson
-    , array
-    , async
-    , base >=4.12 && <5
-    , bytestring
-    , containers
-    , ekg
-    , ekg-core
-    , extra
-    , happstack-server
-    , mtl
-    , net-mqtt
-    , network
-    , network-run
-    , network-uri
-    , optparse-applicative
-    , repline
-    , scientific
-    , servant
-    , servant-server
-    , stm
-    , text
-    , time
-    , unordered-containers
+    , vector
     , wai
     , warp
     , yaml
@@ -167,10 +134,12 @@ test-suite HBridge-test
     , ekg-core
     , extra
     , happstack-server
+    , hesp
     , mtl
     , net-mqtt
     , network
     , network-run
+    , network-simple
     , network-uri
     , optparse-applicative
     , repline
@@ -181,6 +150,7 @@ test-suite HBridge-test
     , text
     , time
     , unordered-containers
+    , vector
     , wai
     , warp
     , yaml

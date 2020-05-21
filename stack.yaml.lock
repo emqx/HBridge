@@ -19,6 +19,13 @@ packages:
   original:
     hackage: network-run-0.2.2
 - completed:
+    hackage: network-3.1.1.1@sha256:b704cb6676c03e98267190df797497587576a2e96094550ea143415239bbe66e,4268
+    pantry-tree:
+      size: 3297
+      sha256: 975170abd872edadd5afea9911eaebfd7683fe6e53f0a898343743d938b7b80d
+  original:
+    hackage: network-3.1.1.1
+- completed:
     hackage: ekg-0.4.0.15@sha256:d1b824c2f3bea46fe68d1ce194c61dffe2c58a742dbbb0087f788da849c0d5dc,2031
     pantry-tree:
       size: 1495
@@ -46,6 +53,17 @@ packages:
       sha256: d8baf796ada475bf15e145bcb316e4d6cd392308deed90be863c6ffc5b82047d
   original:
     hackage: net-mqtt-0.6.2.3
+- completed:
+    name: hesp
+    version: 0.1.0.0
+    git: https://github.com/hstream-io/hesp.git
+    pantry-tree:
+      size: 772
+      sha256: 9d15b9ed36f0fc0e550b762df8f91c37331d3bd5b3f5146b874c731198e1165e
+    commit: a40a3feb982ac20871c1aa3d11d9f114c41ca9fc
+  original:
+    git: https://github.com/hstream-io/hesp.git
+    commit: a40a3feb982ac20871c1aa3d11d9f114c41ca9fc
 snapshots:
 - completed:
     size: 491389

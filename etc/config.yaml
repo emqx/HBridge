@@ -79,3 +79,13 @@ brokers:
   - 'mountpoint_tcp3/#'
   - 'mountpoint_office/#'
   connectType: TCPConnection
+
+-
+  brokerName: brokerRESP
+  brokerMount: ''
+  brokerURI: tcp://192.168.1.192:6560
+  brokerFwds:
+  - '#'
+  brokerSubs:
+  - '#'
+  connectType: TCPConnection

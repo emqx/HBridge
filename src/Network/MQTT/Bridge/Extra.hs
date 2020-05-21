@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.MQTT.Bridge.Extra
   ( parseSQLFile
@@ -11,28 +11,32 @@ module Network.MQTT.Bridge.Extra
   , insertToN
   , deleteAtN
   , fwdTCPMessage
+  , fwdTCPMessage'
   , recvTCPMessage
   ) where
 
+import           Control.Exception
+import           Data.Aeson
+import qualified Data.ByteString                  as BS
+import qualified Data.ByteString.Char8            as BSC (hPutStrLn)
+import qualified Data.ByteString.Lazy             as BL
+import qualified Data.HashMap.Strict              as HM
+import qualified Data.List                        as L
+import qualified Data.Map                         as Map
 import           Data.Text
 import           Data.Text.Encoding
-import qualified Data.List             as L
-import qualified Data.Map              as Map
-import qualified Data.HashMap.Strict   as HM
-import qualified Data.ByteString.Lazy  as BL
-import qualified Data.ByteString       as BS
-import qualified Data.ByteString.Char8 as BSC (hPutStrLn)
-import           Control.Exception
-import           System.IO
-import           Data.Aeson
-import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.MQTT.Topic
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Bridge.SQL.SkelESQL
 import           Network.MQTT.Bridge.SQL.AbsESQL
-import           Network.MQTT.Bridge.SQL.ParESQL
 import           Network.MQTT.Bridge.SQL.ErrM
+import           Network.MQTT.Bridge.SQL.ParESQL
+import           Network.MQTT.Bridge.SQL.SkelESQL
+import           Network.MQTT.Bridge.Types
+import           Network.MQTT.Client
+import           Network.MQTT.Topic
+import           Network.MQTT.Types
+import           Network.Simple.TCP               as TCP
+import qualified Network.HESP                     as HESP
+import qualified Data.Vector                      as V
+import           System.IO
 
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
@@ -40,27 +44,27 @@ lookup' ParsedProg{..} n o = case a1 of
     Nothing -> a2
     _ -> case a2 of
            Nothing -> a1
-           _ -> a2
+           _       -> a2
   where
     a1 = HM.lookup n o
     n' = (Map.!) sel (unpack n)
     a2 = case n' of
-           Nothing -> Nothing
+           Nothing  -> Nothing
            Just n'' -> HM.lookup (pack n'') o
 
 processCond :: ParsedProg -> Message -> Object -> Cond -> Bool
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondEQ i v)
   | l == "topic" = case r of
                      String t -> blToText _pubTopic == t
-                     _ -> False
+                     _        -> False
   | l == "retain" = case r of
                       Bool b -> _pubRetain == b
-                      _ -> False
+                      _      -> False
   | l == "QoS" = case r of
                    String t -> _pubQoS == read (unpack t)
-                   _ -> False
+                   _        -> False
   | otherwise = case lookup' pp l o of
-                  Nothing -> False
+                  Nothing   -> False
                   (Just v') -> r == v'
   where
     l = pack . transIdent $ i
@@ -68,15 +72,15 @@ processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondEQ i v)
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondNE i v)
   | l == "topic" = case r of
                      String t -> blToText _pubTopic /= t
-                     _ -> False
+                     _        -> False
   | l == "retain" = case r of
                       Bool b -> _pubRetain /= b
-                      _ -> False
+                      _      -> False
   | l == "QoS" = case r of
                    String t -> _pubQoS /= read (unpack t)
-                   _ -> False
+                   _        -> False
   | otherwise = case lookup' pp l o of
-                  Nothing -> False
+                  Nothing   -> False
                   (Just v') -> r /= v'
   where
     l = pack . transIdent $ i
@@ -91,9 +95,9 @@ processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondGT i v)
   | l == "retain" = False
   | l == "QoS" = case r of
                    String t -> _pubQoS < read (unpack t)
-                   _ -> False
+                   _        -> False
   | otherwise = case lookup' pp l o of
-                  Nothing -> False
+                  Nothing   -> False
                   (Just v') -> r < v'
   where
     l = pack . transIdent $ i
@@ -103,9 +107,9 @@ processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondLE i v)
   | l == "retain" = False
   | l == "QoS" = case r of
                    String t -> _pubQoS > read (unpack t)
-                   _ -> False
+                   _        -> False
   | otherwise = case lookup' pp l o of
-                  Nothing -> False
+                  Nothing   -> False
                   (Just v') -> v' < r
   where
     l = pack . transIdent $ i
@@ -115,10 +119,10 @@ processModify :: (String, Value) -> Message -> Message
 processModify (s,v) msg@(PubPkt req@PublishRequest{..} n)
   | s == "topic" = case v of
                      String t -> PubPkt req{_pubTopic = textToBL t} n
-                     _ -> msg
+                     _        -> msg
   | s == "retain" = case v of
                       Bool b -> PubPkt req{_pubRetain = b} n
-                      _ -> msg
+                      _      -> msg
   | s == "QoS" = case v of
                    String t -> if t `elem` ["QoS0","QoS1","QoS2"]
                                then PubPkt req{_pubQoS = read (unpack t)} n
@@ -163,7 +167,7 @@ parseSQLFile f = do
       let p' = pProgram . myLexer $ sql
       case p' of
         Bad _ -> return Nothing
-        Ok p -> return . Just . progToFunc . transProgram $ p
+        Ok p  -> return . Just . progToFunc . transProgram $ p
 
 -- | Check if there exists a topic in the list that the given one can match.
 existMatch :: Topic -> [Topic] -> Bool
@@ -278,13 +282,45 @@ subtractList l s = L.filter (\x -> not (x `L.elem` s)) l
 
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.
-fwdTCPMessage :: Handle -> Message -> IO ()
-fwdTCPMessage h msg = do
-  BSC.hPutStrLn h $ BL.toStrict (encode msg)
+fwdTCPMessage :: Socket -> Message -> IO ()
+fwdTCPMessage s msg = do
+  TCP.send s $ (BL.toStrict (encode msg))
+  --BSC.hPutStrLn h $ BL.toStrict (encode msg)
 
 -- | Receive message from certain broker. Broker-dependent and will be
 -- replaced soon.
-recvTCPMessage :: Handle -> IO (Maybe Message)
-recvTCPMessage h = do
-  s <- BS.hGetLine h
-  return $ decode (BL.fromStrict s)
+recvTCPMessage :: Socket -> Int -> IO (Maybe Message)
+recvTCPMessage s n = do
+  bs' <- TCP.recv s n
+  case bs' of
+    Nothing -> return Nothing
+    Just bs -> return $ decode (BL.fromStrict bs)
+
+
+
+pub :: BS.ByteString -> BS.ByteString -> HESP.Message
+pub topic payload =
+  let cs = [ HESP.mkBulkString "PUB"
+           , HESP.mkBulkString "<unique-id>"
+	   , HESP.mkBulkString topic
+	   , HESP.mkBulkString payload
+           ]
+   in HESP.mkArray $ V.fromList cs
+
+fwdTCPMessage' :: Socket -> Message -> IO ()
+fwdTCPMessage' s msg = do
+  HESP.sendMsg s $ pub "test_topic" (BL.toStrict $ encode msg)
+
+  ack <- HESP.recvMsg s 1024
+  putStr $ "\n\n-> " ++ show ack ++ "\n\n"
+  case ack of
+    Left  e -> putStrLn $ "--> " ++ (show e)
+    Right r -> putStrLn $ "--> " ++ (show r) ++ " " ++ show msg ++ "\n\n"
+
+
+  {-
+  (s' :: Either SomeException BS.ByteString) <- try $ BS.hGetLine h
+  case s' of
+    Left _ -> return Nothing
+    Right s -> if BS.null s then return Nothing else return $ decode (BL.fromStrict s)
+  -}

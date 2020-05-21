@@ -1,29 +1,29 @@
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 
 module Network.MQTT.Bridge.RestAPI
   ( apiApp
   ) where
 
-import           Prelude                   hiding (read)
-import qualified Data.List                 as L
-import qualified Data.Map                  as Map
-import           Data.Time
 import           Control.Concurrent.STM
 import           Control.Monad.IO.Class
-import           System.Metrics.Counter
+import qualified Data.List                 as L
+import qualified Data.Map                  as Map
+import           Data.Proxy
+import           Data.Time
+import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Types
 import           Network.Wai
+import           Prelude                   hiding (read)
 import           Servant.API
 import           Servant.Server
-import           Data.Proxy
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Bridge.Extra
+import           System.Metrics.Counter
 
 
 type UserAPI = "funcs"   :> Get '[JSON] [String]
