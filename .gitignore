@@ -1,4 +1,7 @@
 .stack-work/
+.history
 *~
 *.log
 save*.txt
+stack.yaml.lock
+hie.yaml

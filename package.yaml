@@ -27,35 +27,58 @@ default-extensions: OverloadedStrings
 
 dependencies:
 - base >= 4.12 && < 5
+- extra
+- array
+- vector
 - text
 - time
+- scientific
 - bytestring
 - containers
 - unordered-containers
-- network
+- network-simple
 - stm
 - mtl
 - async
-- happstack-server
 - aeson
+- yaml
 - ekg
-- network-run
+- ekg-core
 - net-mqtt
 - network-uri
+- optparse-applicative
+- wai
+- warp
+- servant
+- servant-server
+- hesp
 
 library:
   source-dirs: src
 
+
 executables:
-  HBridge-exe:
+  HBridge:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         app/bridge
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - HBridge
+
+#  monitor:
+#    main:                Main.hs
+#    source-dirs:         app/monitor
+#    ghc-options:
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
+#    dependencies:
+#    - HBridge
+
+
 
 tests:
   HBridge-test:
@@ -67,4 +90,3 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - HBridge
-    - random

@@ -1,0 +1,181 @@
+# File to write log to.
+logFile: test.log
+
+# Log level.
+# It can be one of DEBUG, INFO, WARNING and ERROR.
+logLevel: INFO
+
+# Whether to print log to screen.
+logToStdErr: true
+
+# Whether to forward MQTT messages to TCP brokers.
+crossForward: true
+
+# Message processing functions.
+# A message will go through these functions one by one.
+sqlFiles:
+- "etc/sql.sql"
+
+# Brokers. Each of them has following fields:
+# - brokerName:  Name of the broker. It is a unique identifier of a broker.
+
+# - brokerURI:   URI of the broker that the bridge will connect to.
+
+# - connectType: Type of connection of this broker. It can be one of
+#                MQTTConnection and TCPConnection.
+
+# - brokerSubs:  Topic list which the broker subscribes. Only messages with
+#                matched topic will be forwarded to this broker.
+
+# - brokerFwds:  Topic list which the broker forwards. Only messages with
+#                matched topic will be sent from this broker to the bridge.
+
+# - brokerMount: Mountpoint of this broker. It will be added to the head of
+#                topic of messages that the bridge receive from the broker.
+#                This is mostly used for preventing message looping between brokers.
+#                The bridge provides NO guarantee on loop-free property.
+
+brokers:
+-
+  brokerName: broker1
+  brokerMount: 'mountpoint_home/'
+  brokerURI: mqtt://localhost:1883/mqtt
+  brokerFwds:
+  - 'home/room/temp'
+  brokerSubs:
+  - 'mountpoint_office/mountpoint_on_recv_office/office/+'
+  connectType: MQTTConnection
+
+-
+  brokerName: broker2
+  brokerMount: 'mountpoint_office/'
+  brokerURI: mqtt://localhost:1885/mqtt
+  brokerFwds:
+  - 'office/light'
+  brokerSubs:
+  - 'mountpoint_home/home/#'
+  connectType: MQTTConnection
+
+-
+  brokerName: broker3
+  brokerMount: 'mountpoint_tcp3/'
+  brokerURI: tcp://localhost:19192
+  brokerFwds:
+  - 'tcp/#'
+  brokerSubs:
+  - 'home/+/temp'
+  - 'mountpoint_tcp4/#'
+  - 'mountpoint_home/#'
+  connectType: TCPConnection
+
+-
+  brokerName: broker4
+  brokerMount: 'mountpoint_tcp4/'
+  brokerURI: tcp://localhost:19193
+  brokerFwds:
+  - 'home/room/temp'
+  - 'tcp/#'
+  brokerSubs:
+  - 'mountpoint_tcp3/#'
+  - 'mountpoint_office/#'
+  connectType: TCPConnection
+
+-
+  brokerName: brokerRESP1
+  brokerMount: ''
+  brokerURI: tcp://192.168.1.192:6560
+  brokerFwds:
+  - '#'
+  brokerSubs:
+  - '#'
+  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP2
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP3
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP4
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP5
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP6
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#-
+#  brokerName: brokerRESP7
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP8
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP9
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#
+#-
+#  brokerName: brokerRESP10
+#  brokerMount: ''
+#  brokerURI: tcp://192.168.1.192:6560
+#  brokerFwds:
+#  - '#'
+#  brokerSubs:
+#  - '#'
+#  connectType: TCPConnection
+#

@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7bf0fcaab0f924efa1177ee8037c5dbeb54901e9866cd7da8a9a3569935aea6f
+-- hash: 6b90e3b151bb13a33fa29e5e3c94b868da548ea2948edf4d0c96f8cd82c216f6
 
 name:           HBridge
 version:        0.0.1
@@ -23,9 +23,16 @@ extra-source-files:
 
 library
   exposed-modules:
-      Environment
-      Extra
-      Types
+      Network.MQTT.Bridge.Environment
+      Network.MQTT.Bridge.Extra
+      Network.MQTT.Bridge.RestAPI
+      Network.MQTT.Bridge.SQL.AbsESQL
+      Network.MQTT.Bridge.SQL.ErrM
+      Network.MQTT.Bridge.SQL.LexESQL
+      Network.MQTT.Bridge.SQL.ParESQL
+      Network.MQTT.Bridge.SQL.PrintESQL
+      Network.MQTT.Bridge.SQL.SkelESQL
+      Network.MQTT.Bridge.Types
   other-modules:
       Paths_HBridge
   hs-source-dirs:
@@ -33,49 +40,69 @@ library
   default-extensions: OverloadedStrings
   build-depends:
       aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
     , containers
     , ekg
-    , happstack-server
+    , ekg-core
+    , extra
+    , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
+    , network-simple
     , network-uri
+    , optparse-applicative
+    , scientific
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
+    , vector
+    , wai
+    , warp
+    , yaml
   default-language: Haskell2010
 
-executable HBridge-exe
+executable HBridge
   main-is: Main.hs
   other-modules:
       Paths_HBridge
   hs-source-dirs:
-      app
+      app/bridge
   default-extensions: OverloadedStrings
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       HBridge
     , aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
     , containers
     , ekg
-    , happstack-server
+    , ekg-core
+    , extra
+    , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
+    , network-simple
     , network-uri
+    , optparse-applicative
+    , scientific
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
+    , vector
+    , wai
+    , warp
+    , yaml
   default-language: Haskell2010
 
 test-suite HBridge-test
@@ -90,20 +117,29 @@ test-suite HBridge-test
   build-depends:
       HBridge
     , aeson
+    , array
     , async
     , base >=4.12 && <5
     , bytestring
     , containers
     , ekg
-    , happstack-server
+    , ekg-core
+    , extra
+    , hesp
     , mtl
     , net-mqtt
-    , network
-    , network-run
+    , network-simple
     , network-uri
-    , random
+    , optparse-applicative
+    , scientific
+    , servant
+    , servant-server
     , stm
     , text
     , time
     , unordered-containers
+    , vector
+    , wai
+    , warp
+    , yaml
   default-language: Haskell2010
