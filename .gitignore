@@ -3,3 +3,4 @@
 *~
 *.log
 save*.txt
+stack.yaml.lock
