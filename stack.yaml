@@ -44,7 +44,7 @@ extra-deps:
   - ekg-json-0.1.0.6
   - net-mqtt-0.6.2.3
   - git: https://github.com/hstream-io/hesp.git
-    commit: 49f97f37954389ceea5efa17a429b611f2f4f7d1
+    commit: 9c6bbbb7bdf99ba42c0061fade62641bc35ef50f
 
 
   # - acme-missiles-0.3

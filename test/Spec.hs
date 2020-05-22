@@ -10,14 +10,14 @@ import           Control.Monad
 import           Data.Aeson
 import qualified Data.ByteString.Char8     as BS
 import qualified Data.ByteString.Lazy      as BSL
-import           Data.Either               (isRight, fromRight)
+import           Data.Either               (fromRight, isRight)
 import qualified Data.List                 as L
 import           Data.Maybe                (fromJust)
 import           Data.Time
 import qualified Data.Yaml                 as Y
 import           GHC.Generics
-import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
 import           Network.Simple.TCP
 --import           Network.Socket
@@ -139,7 +139,7 @@ runBroker host port topic logger = do
   where
     handleException e = do
       case e of
-        Left e -> putStrLn $ "\n\n\n" ++ show e ++ "\n\n\n"
+        Left e  -> putStrLn $ "\n\n\n" ++ show e ++ "\n\n\n"
         Right _ -> return ()
 
     sending s logger = forever $ do
