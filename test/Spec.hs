@@ -20,7 +20,6 @@ import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
 import           Network.Simple.TCP
---import           Network.Socket
 import           Network.URI
 import           Text.Printf
 
@@ -115,8 +114,8 @@ main = do
   brokerArgs <- getBrokerArgs
   let tcpArgs = L.filter (\(t,_,_) -> t == TCPConnection) brokerArgs
       --tcpArgs' = if not (L.null tcpArgs) then L.tail tcpArgs else [] -- the first one is for monitoring
-      tcpArgs' = L.init tcpArgs
-      --tcpArgs' = tcpArgs
+      --tcpArgs' = L.init tcpArgs
+      tcpArgs' = tcpArgs
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
@@ -150,8 +149,10 @@ runBroker host port topic logger = do
       threadDelay 3000000
 
     receiving s logger = forever $ do
-      msg' <- recvBridgeMsg s 128
-      case msg' of
-        Nothing -> return ()
-        Just msg ->
-          logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (show msg)
+      msgs' <- recvBridgeMsgs s 128
+      mapM_ processRecvMsg' msgs'
+
+    processRecvMsg' msg' = case msg' of
+      Nothing -> return ()
+      Just msg ->
+        logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (show msg)

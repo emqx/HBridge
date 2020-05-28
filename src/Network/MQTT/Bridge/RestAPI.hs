@@ -17,7 +17,6 @@ import qualified Data.List                 as L
 import qualified Data.Map                  as Map
 import           Data.Proxy
 import           Data.Time
-import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.Types
 import           Network.Wai
 import           Prelude                   hiding (read)
@@ -27,26 +26,18 @@ import           System.Metrics.Counter
 
 
 type UserAPI = "funcs"   :> Get '[JSON] [String]
-          :<|> "funcs"   :> ReqBody '[JSON] Message :> Post '[JSON] String
+--          :<|> "funcs"   :> ReqBody '[JSON] Message :> Post '[JSON] String
           :<|> "metrics" :> Get '[JSON] Metrics
 
 httpServer :: Env -> Server UserAPI
 httpServer Env{..} = getFuncs
-                :<|> postFuncs
+--                :<|> postFuncs
                 :<|> getMetrics
   where
     getFuncs :: Handler [String]
     getFuncs = do
       funcs <- liftIO . readTVarIO $ functions envBridge
       return ["[ " ++ n ++ " ]"| (n,_) <- funcs]
-
-    postFuncs :: Message -> Handler String
-    postFuncs msg = do
-      case msg of
-        DeleteFunc i -> do
-          liftIO . atomically $ modifyTVar (functions envBridge) (deleteAtN i)
-          return "OK"
-        _ -> return "Unrecognized function"
 
     getMetrics :: Handler Metrics
     getMetrics = do

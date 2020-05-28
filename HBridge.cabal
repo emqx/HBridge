@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6b90e3b151bb13a33fa29e5e3c94b868da548ea2948edf4d0c96f8cd82c216f6
+-- hash: 06ec4080d0fe6a8dbbeea92b9dd7dbbb8e1e672483c897f60e4df377958cfac2
 
 name:           HBridge
 version:        0.0.1
@@ -19,7 +19,6 @@ license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
-    ChangeLog.md
 
 library
   exposed-modules:

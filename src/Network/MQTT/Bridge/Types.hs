@@ -51,7 +51,6 @@ import           GHC.Generics
 import           Network.MQTT.Client
 import           Network.MQTT.Types
 import           Network.URI
---import           Network.Socket
 import           Network.Simple.TCP
 import           Options.Applicative
 import           System.IO
@@ -69,11 +68,6 @@ data Message = PlainMsg
     , topic   :: Topic
     }
     | PubPkt PublishRequest BrokerName
-    | ListFuncs
-    | ListFuncsAck [String]
-    | DeleteFunc
-    { delIndex :: Int
-    }
     deriving (Show, Generic)
 
 
@@ -301,6 +295,7 @@ data MsgNum = MsgNum
 data Metrics = Metrics
     { version        :: String
     , sysTime        :: UTCTime
+    -- NominalDiffTime
     , runningTime    :: String -- NominalDiffTime
     , sysMsgNum      :: MsgNum
     , runningBrokers :: [Broker]
