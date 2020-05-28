@@ -1,7 +1,7 @@
+{-# LANGUAGE BlockArguments      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE BlockArguments      #-}
 
 module Network.MQTT.Bridge.Extra
   ( parseSQLFile
@@ -13,21 +13,22 @@ module Network.MQTT.Bridge.Extra
   , deleteAtN
   , fwdTCPMessage
   , fwdTCPMessage'
-  , recvTCPMessage
-  , recvBridgeMsg
+  , recvTCPMessages
+  , recvBridgeMsgs
   , sendBridgeMsg
   ) where
 
 import           Control.Exception
 import           Data.Aeson
 import qualified Data.ByteString                  as BS
-import qualified Data.ByteString.Char8            as BSC (hPutStrLn)
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as HM
 import qualified Data.List                        as L
 import qualified Data.Map                         as Map
 import           Data.Text
 import           Data.Text.Encoding
+import qualified Data.Vector                      as V
+import qualified Network.HESP                     as HESP
 import           Network.MQTT.Bridge.SQL.AbsESQL
 import           Network.MQTT.Bridge.SQL.ErrM
 import           Network.MQTT.Bridge.SQL.ParESQL
@@ -37,8 +38,6 @@ import           Network.MQTT.Client
 import           Network.MQTT.Topic
 import           Network.MQTT.Types
 import           Network.Simple.TCP               as TCP
-import qualified Network.HESP                     as HESP
-import qualified Data.Vector                      as V
 
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
@@ -175,79 +174,6 @@ parseSQLFile f = do
 existMatch :: Topic -> [Topic] -> Bool
 existMatch t ts =  True `elem` [pat `match` t | pat <- ts]
 
-
-{-
--- | Save a message to file. For any type of message.
-saveMsg :: FilePath -> Message -> FuncSeries Message
-saveMsg f msg = do
-  liftIO $ catchError (appendFile f (show msg ++ "\n")) (\e -> print e)
-  modify (+ 1)
-  log <- liftIO $ mkLog INFO $ printf "Saved to %s: [%s].\n" f (show msg)
-  return msg
-
--- | Modify certain field of payload. For PlainMsg and PubPkt types.
-modifyField :: [Text] -> Value -> Message -> FuncSeries Message
-modifyField fields v msg = case msg of
-  PlainMsg p t -> do
-    modify (+ 1)
-    let (obj' :: Maybe Object) = decode (textToBL p)
-    case obj' of
-      Just obj -> do
-        let newobj = helper obj fields v
-            newp   = encode newobj
-        return $ PlainMsg (decodeUtf8 . BL.toStrict $ newp) t
-      Nothing  -> return msg
-
-  PubPkt pubReq@PublishRequest{..} n -> do
-    modify (+ 1)
-    let (obj' :: Maybe Object) = decode _pubBody
-    case obj' of
-      Just obj -> do
-        let newobj = helper obj fields v
-            newbody = encode newobj
-        return $ PubPkt pubReq{_pubBody = newbody} n
-      Nothing  -> return msg
-
-  _ -> return msg
-
-  where
-    helper o [] v = o
-    helper o (f:fs) v =
-      case HM.lookup f o of
-        Just o' -> case o' of
-          Object o'' -> if L.null fs
-                        then HM.adjust (const v) f o
-                        else HM.adjust (const $ Object $ helper o'' fs v) f o
-          _          -> if L.null fs
-                        then HM.adjust (const v) f o
-                        else o
-        Nothing -> o
-
--- | Modify topic of message to another one. For PlainMsg and PubPkt types.
-modifyTopic :: Topic -> Topic -> Message -> FuncSeries Message
-modifyTopic pat t' msg = do
-  modify (+ 1)
-  case msg of
-    PlainMsg p t -> if pat `match` t
-                    then do
-      log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" t t'
-      tell $ show log
-      return $ msg {topic = t'}
-                    else return msg
-
-    PubPkt pubReq n -> if pat `match` (decodeUtf8 . BL.toStrict $ t)
-                       then do
-      log <- liftIO $ mkLog INFO $ printf "Modified Topic %s to %s.\n" (decodeUtf8 . BL.toStrict $ t) t'
-      tell $ show log
-      return $ PubPkt pubReq{_pubTopic = BL.fromStrict . encodeUtf8 $ t'} n
-                       else return msg
-        where
-          t = _pubTopic pubReq
-
-    _            -> return msg
-
--}
-
 -- | Compose a mountpoint with a topic
 composeMP :: Topic -> Topic -> Topic
 composeMP = append
@@ -276,12 +202,6 @@ deleteAtN n xs
          []     -> p1
          (_:ys) -> p1 ++ ys
 
-{-
--- | Remove elements of a list from another one.
-subtractList :: (Eq a) => [a] -> [a] -> [a]
-subtractList l s = L.filter (\x -> not (x `L.elem` s)) l
--}
-
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.
 fwdTCPMessage :: Socket -> Message -> IO ()
@@ -290,14 +210,13 @@ fwdTCPMessage = sendBridgeMsg
 
 -- | Receive message from certain broker. Broker-dependent and will be
 -- replaced soon.
-recvTCPMessage :: Socket -> Int -> IO (Maybe Message)
-recvTCPMessage = recvBridgeMsg
+recvTCPMessages :: Socket -> Int -> IO [Maybe Message]
+recvTCPMessages = recvBridgeMsgs
 
 
 pub :: BS.ByteString -> BS.ByteString -> HESP.Message
 pub topic payload =
-  let cs = [ HESP.mkBulkString "pub"
-           , HESP.mkBulkString "<unique-id>"
+  let cs = [ HESP.mkBulkString "spub"
 	   , HESP.mkBulkString topic
 	   , HESP.mkBulkString payload
            ]
@@ -305,36 +224,34 @@ pub topic payload =
 
 fwdTCPMessage' :: Socket -> Message -> IO ()
 fwdTCPMessage' s msg = do
-  HESP.sendMsg s $ pub "test_topic" (BL.toStrict $ encode msg)
-  {-
-  ack <- HESP.recvMsg s 1024
-  putStr $ "\n-> " ++ show ack ++ "\n"
-  case ack of
-    Left  e -> putStrLn $ "--> " ++ show e
-    Right r -> putStrLn $ "--> " ++ show r ++ " " ++ show msg ++ "\n\n"
-  -}
+    HESP.sendMsgs s
+      [ pub "internal_topic" (BL.toStrict $ encode msg)
+      ]
 
-  {-
-  (s' :: Either SomeException BS.ByteString) <- try $ BS.hGetLine h
-  case s' of
-    Left _ -> return Nothing
-    Right s -> if BS.null s then return Nothing else return $ decode (BL.fromStrict s)
-  -}
+    acks <- HESP.recvMsgs s 1024
+    putStr $ "\n-> " ++ show acks ++ "\n"
+    mapM_ processAck acks
+  where
+    processAck ack = case ack of
+      Left  e -> putStrLn $ "--> " ++ show e
+      Right r -> putStrLn $ "--> " ++ show r ++ " " ++ show msg ++ "\n\n"
 
-recvBridgeMsg :: Socket -> Int -> IO (Maybe Message)
-recvBridgeMsg s n = do
-  msg' <- HESP.recvMsg s n
-  case msg' of
-    Left _ -> return Nothing
-    Right msg ->
-      case msg of
-        HESP.MatchSimpleString bs -> return $ decode (BL.fromStrict bs)
-        _                         -> return Nothing
+recvBridgeMsgs :: Socket -> Int -> IO [Maybe Message]
+recvBridgeMsgs s n = do
+    msgs' <- HESP.recvMsgs s n
+    V.toList <$> mapM processMsg' msgs'
+  where
+    processMsg' msg' = case msg' of
+      Left _ -> return Nothing
+      Right msg ->
+        case msg of
+          HESP.MatchSimpleString bs -> return $ decode (BL.fromStrict bs)
+          _                         -> return Nothing
 
 sendBridgeMsg :: Socket -> Message -> IO ()
 sendBridgeMsg s msg = do
   let bs  = (BL.toStrict $ encode msg)
       msg' = HESP.mkSimpleString bs
   case msg' of
-    Left _ -> return ()
+    Left _    -> return ()
     Right msg -> HESP.sendMsg s msg

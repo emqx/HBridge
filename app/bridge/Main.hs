@@ -6,15 +6,12 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
-
 
 module Main where
 
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
-import           Control.Exception
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -22,7 +19,7 @@ import           Control.Monad.State
 import           Data.Either                     (isLeft, isRight)
 import qualified Data.List                       as L
 import qualified Data.Map                        as Map
-import           Data.Maybe                      (isJust, fromJust)
+import           Data.Maybe                      (fromJust)
 import           Network.MQTT.Bridge.Environment
 import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.RestAPI
@@ -32,7 +29,6 @@ import           Network.MQTT.Types
 import           Network.Simple.TCP
 import           Network.Wai.Handler.Warp
 import           Prelude                         hiding (read)
-import           System.IO
 import           System.Metrics.Counter
 import           System.Remote.Monitoring        hiding (Server)
 import           Text.Printf
@@ -76,12 +72,12 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
   activeTCPs <- readTVarIO activeTCP
   let activeMQNs = Map.keys activeMQs
       allMQs = L.filter (\b -> connectType b == MQTTConnection) (brokers conf)
-      missedMQs = L.filter (\b -> not ((brokerName b) `L.elem` activeMQNs)) allMQs
+      missedMQs = L.filter (\b -> brokerName b `L.notElem` activeMQNs) allMQs
       missedMQNs = brokerName <$> missedMQs
 
       activeTCPNs = Map.keys activeTCPs
       allTCPs = L.filter (\b -> connectType b == TCPConnection) (brokers conf)
-      missedTCPs = L.filter (\b -> not ((brokerName b) `L.elem` activeTCPNs)) allTCPs
+      missedTCPs = L.filter (\b -> brokerName b `L.notElem` activeTCPNs) allTCPs
       missedTCPNs = brokerName <$> missedTCPs
 
   -- MQTT
@@ -90,7 +86,7 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
 
   tups1' <- mapM (runReaderT (runExceptT (getMQTTClient (callbackFunc env)))) missedMQs
   mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups1')
-  let tups1 = [t | (Right t) <- (L.filter isRight tups1')]
+  let tups1 = [t | (Right t) <- L.filter isRight tups1']
   atomically $ modifyTVar activeMQTT (Map.union (Map.fromList tups1))
   mapM_ (\(n, mc) -> do
             let (fwds, subs) = fromJust (Map.lookup n rules)
@@ -103,7 +99,7 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
       printf "Lost TCP connections: %s . Retrying..." (show missedTCPNs)
   tups2' <- mapM (runReaderT (runExceptT getSocket)) missedTCPs
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
-  let tups2 = [t | (Right t) <- (L.filter isRight tups2')]
+  let tups2 = [t | (Right t) <- L.filter isRight tups2']
   atomically $ modifyTVar activeTCP (Map.union (Map.fromList tups2))
   when runProcess $ mapM_ (`processTCP` env) tups2
 
@@ -138,7 +134,7 @@ runMQTT (n, mc) env@(Env Bridge{..} conf logger) = do
     forwarding ch logger = forever $ do
       msg <- atomically (readTChan ch)
       case msg of
-        PubPkt p n' -> when ((blToText (_pubTopic p)) `existMatch` subs && n /= n') $ do
+        PubPkt p n' -> when (blToText (_pubTopic p) `existMatch` subs && n /= n') $ do
           logging logger INFO $ printf "Forwarded   [%s] from %s to %s." (show msg) n' n
           inc (mqttFwdCounter counters)
           pubAliased mc (blToText $ _pubTopic p) (_pubBody p) (_pubRetain p) (_pubQoS p) (_pubProps p)
@@ -157,7 +153,7 @@ processTCP :: (BrokerName, Socket)
         -> Env
         -> IO ()
 processTCP tup@(n, s) env@(Env Bridge{..} _ logger) = do
-    forkFinally (runTCP tup env) (\e -> handleException e)
+    forkFinally (runTCP tup env) handleException
     return ()
   where
     handleException e = case e of
@@ -177,59 +173,36 @@ runTCP :: (BrokerName, Socket)
     -> IO ()
 runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
     ch <- atomically $ dupTChan broadcastChan
-    race (receiving ch logger) (forwarding ch logger)
-    --forkFinally (forwarding ch logger) (\e -> handleException e)
+    race (receiving ch) (forwarding ch)
     return ()
   where
-    handleException e = do
-      case e of
-        --Left e -> logging logger WARNING $ "\n\n\n" ++ show e ++ "\n\n\n"
-        Left e -> putStrLn $ "\n\n\n" ++ show e ++ "\n\n\n"
-        Right _ -> return ()
-
     (fwds, subs) = fromJust (Map.lookup n rules)
-    mp = fromJust (Map.lookup n mountPoints)
+    mp           = fromJust (Map.lookup n mountPoints)
 
-    receiving ch logger = forever $ do
-      msg <- recvTCPMessage s 128
-      when (isJust msg) $
+    processRecvMsgs ch msg = case msg of
+      Just (PlainMsg p t) -> do
         logging logger INFO $ printf "[TCP]  Received    [%s]." (show msg)
-      case msg of
+        inc (tcpMsgRecvCounter counters)
+        let msgMP = PlainMsg p (mp `composeMP` t)
+        when (t `existMatch` fwds) $ atomically $ do
+          writeTChan broadcastChan msgMP
+          readTChan ch
+          return ()
+        logging logger INFO $ printf "[TCP]  Mountpoint added: [%s]." (show msgMP)
+      _                   -> return ()
 
-        Just (PlainMsg p t) -> do
-          inc (tcpMsgRecvCounter counters)
-          let msgMP = PlainMsg p (mp `composeMP` t)
-          when (t `existMatch` fwds) $ atomically $ do
-            writeTChan broadcastChan msgMP
-            readTChan ch
-            return ()
-          logging logger INFO $ printf "[TCP]  Mountpoint added: [%s]." (show msgMP)
+    receiving ch = forever $ do
+      msgs <- recvTCPMessages s 128
+      mapM_ (processRecvMsgs ch) msgs
 
-        Just ListFuncs -> do
-          inc (tcpCtlRecvCounter counters)
-          funcs <- readTVarIO functions
-          let (items :: [String]) =
-                [printf "%d [%s]\n" i n | ((i :: Int), (n,_)) <- [0..] `zip` funcs]
-          logging logger INFO $ "[TCP]  Functions:\n" ++ L.concat items
-          fwdTCPMessage s (ListFuncsAck items)
-
-        Just (DeleteFunc i) -> do
-          inc (tcpCtlRecvCounter counters)
-          atomically $ modifyTVar functions (deleteAtN i)
-          logging logger INFO $ printf "[TCP]  Function : delete the %d th function." i
-
-        _                   -> return ()
-
-    forwarding ch logger = forever $ do
+    forwarding ch = forever $ do
       msg <- atomically (readTChan ch)
-      --logging logger INFO $ printf "\n\nMSG: %s.\n\n" (show msg)
       case msg of
         PlainMsg _ t -> when (t `existMatch` subs) $ do
           fwdTCPMessage s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
-
-        PubPkt req@PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
+        PubPkt PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
           fwdTCPMessage s msg
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
