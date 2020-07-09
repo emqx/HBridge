@@ -78,8 +78,10 @@ runMQTTClient uri' t = do
   mc <- connectURI mqttConfig uri
   subscribe mc [("#", subOptions)] []
   forever $ do
+    --time <- getCurrentTime
+    --let msgBody = BSL.fromStrict $ BS.pack $ show time
     pubAliased mc t msgBody False QoS0 []
-    threadDelay 1000000
+    --threadDelay 1000000
 
 -- | Generate broker arguments. For convenience, we assume
 -- 'brokerFwds' is not empty.
@@ -87,7 +89,7 @@ runMQTTClient uri' t = do
 -- described in config file.
 getBrokerArgs :: IO [(ConnectionType, String, Topic)]
 getBrokerArgs = do
-    conf <- fromRight myConfig <$> Y.decodeFileEither "etc/config.yaml"
+    conf <- fromRight myConfig <$> Y.decodeFileEither "etc/config-2.yaml"
     return [(connectType b, brokerURI b, L.head (brokerFwds b)) | b <- (brokers conf)]
 
 -- | Sample payload type, for test only.
@@ -119,11 +121,13 @@ main = do
       mqttArgs = L.filter (\(t,_,_) -> t == MQTTConnection) brokerArgs
       getPort u = fromJust $ L.tail . uriPort <$> uriAuthority (fromJust . parseURI $ u)
       getHost u = fromJust $ uriRegName <$> uriAuthority (fromJust . parseURI $ u)
-  a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "tcp/test/msg" logger) tcpArgs'
+  --a1 <- async $ mapConcurrently_ (\(_,u,t) -> runBroker (getHost u) (getPort u) "tcp/test/msg" logger) tcpArgs'
+  print mqttArgs
   a2 <- async $ mapConcurrently_ (uncurry runMQTTClient) ((\(_,b,c) -> (b,c)) <$> mqttArgs)
-  wait a1
+  --wait a1
   wait a2
 
+{-
 -- | Run a simple broker for test. It is in fact a simple TCP server.
 runBroker :: HostName
           -> ServiceName
@@ -156,3 +160,4 @@ runBroker host port topic logger = do
       Nothing -> return ()
       Just msg ->
         logging logger INFO $ printf "[%s:%s] [TCP] Received [%s]" host port (show msg)
+-}

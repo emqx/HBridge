@@ -46,6 +46,9 @@ import           Data.Map
 import           Data.Maybe             (fromJust, isNothing)
 import           Data.Text.Encoding
 import           Data.Time
+import           Data.UUID
+import qualified Data.UUID              as UUID
+import qualified Data.UUID.V4           as UUID
 import qualified Data.Yaml              as Y
 import           GHC.Generics
 import           Network.MQTT.Client
@@ -82,7 +85,6 @@ instance Semigroup Value where
   v1 <> v2 = v1
 
 deriving instance Read QoS
-deriving instance Ord QoS
 
 deriving instance FromJSON URIAuth
 deriving instance ToJSON URIAuth
@@ -193,7 +195,7 @@ data Bridge = Bridge
     -- ^ Active connections to MQTT brokers
     , activeMQTT    :: TVar (Map BrokerName MQTTClient)
     -- ^ Active TCP connections
-    , activeTCP     :: TVar (Map BrokerName Socket)
+    , activeTCP     :: TVar (Map BrokerName (Socket, UUID))
     -- ^ Topic rules
     , rules         :: Map BrokerName (FwdsTopics, SubsTopics)
     -- ^ Mount points
