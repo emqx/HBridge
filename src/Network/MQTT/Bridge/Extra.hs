@@ -12,7 +12,6 @@ module Network.MQTT.Bridge.Extra
   , insertToN
   , deleteAtN
   , fwdTCPMessage
-  , fwdTCPMessage'
   , recvTCPMessages
   , recvBridgeMsgs
   , sendBridgeMsg
@@ -27,6 +26,9 @@ import qualified Data.List                        as L
 import qualified Data.Map                         as Map
 import           Data.Text
 import           Data.Text.Encoding
+import           Data.UUID
+import qualified Data.UUID              as UUID
+import qualified Data.UUID.V4           as UUID
 import qualified Data.Vector                      as V
 import qualified Network.HESP                     as HESP
 import           Network.MQTT.Bridge.SQL.AbsESQL
@@ -204,7 +206,7 @@ deleteAtN n xs
 
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.
-fwdTCPMessage :: Socket -> Message -> IO ()
+fwdTCPMessage :: (Socket,UUID) -> Topic -> BL.ByteString -> IO ()
 fwdTCPMessage = sendBridgeMsg
   --BSC.hPutStrLn h $ BL.toStrict (encode msg)
 
@@ -212,29 +214,6 @@ fwdTCPMessage = sendBridgeMsg
 -- replaced soon.
 recvTCPMessages :: Socket -> Int -> IO [Maybe Message]
 recvTCPMessages = recvBridgeMsgs
-
-
-pub :: BS.ByteString -> BS.ByteString -> HESP.Message
-pub topic payload =
-  let cs = [ HESP.mkBulkString "spub"
-	   , HESP.mkBulkString topic
-	   , HESP.mkBulkString payload
-           ]
-   in HESP.mkArray $ V.fromList cs
-
-fwdTCPMessage' :: Socket -> Message -> IO ()
-fwdTCPMessage' s msg = do
-    HESP.sendMsgs s
-      [ pub "internal_topic" (BL.toStrict $ encode msg)
-      ]
-
-    acks <- HESP.recvMsgs s 1024
-    putStr $ "\n-> " ++ show acks ++ "\n"
-    mapM_ processAck acks
-  where
-    processAck ack = case ack of
-      Left  e -> putStrLn $ "--> " ++ show e
-      Right r -> putStrLn $ "--> " ++ show r ++ " " ++ show msg ++ "\n\n"
 
 recvBridgeMsgs :: Socket -> Int -> IO [Maybe Message]
 recvBridgeMsgs s n = do
@@ -248,10 +227,11 @@ recvBridgeMsgs s n = do
           HESP.MatchSimpleString bs -> return $ decode (BL.fromStrict bs)
           _                         -> return Nothing
 
-sendBridgeMsg :: Socket -> Message -> IO ()
-sendBridgeMsg s msg = do
-  let bs  = (BL.toStrict $ encode msg)
-      msg' = HESP.mkSimpleString bs
-  case msg' of
-    Left _    -> return ()
-    Right msg -> HESP.sendMsg s msg
+sendBridgeMsg :: (Socket,UUID) -> Topic -> BL.ByteString -> IO ()
+sendBridgeMsg (s,cid) topic payload = do
+  HESP.sendMsg s $ HESP.mkArrayFromList
+    [ HESP.mkBulkString "sput"
+    , HESP.mkBulkString $ UUID.toASCIIBytes cid
+    , HESP.mkBulkString $ encodeUtf8 topic
+    , HESP.mkBulkString $ BL.toStrict payload
+    ]

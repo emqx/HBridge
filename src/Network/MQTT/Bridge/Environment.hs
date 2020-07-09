@@ -11,6 +11,7 @@ module Network.MQTT.Bridge.Environment
   , callbackFunc
   , newEnv1
   , newEnv2
+  , getClientID
   ) where
 
 import           Control.Concurrent.STM
@@ -23,6 +24,10 @@ import qualified Data.List                 as L
 import           Data.Map                  as Map
 import           Data.Maybe                (fromJust, isJust, isNothing)
 import           Data.Time
+import           Data.UUID
+import qualified Data.UUID              as UUID
+import qualified Data.UUID.V4           as UUID
+import qualified Data.Vector               as V
 import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
@@ -31,6 +36,7 @@ import           Network.Simple.TCP
 import           Network.URI
 import           System.Metrics.Counter
 import           Text.Printf
+import qualified Network.HESP              as HESP
 
 
 -- | Create a TCP connection and return the handle with broker name.
@@ -137,7 +143,7 @@ newEnv2 = do
   tups1' <- liftIO $ mapM (runReaderT (runExceptT (getMQTTClient (callbackFunc env))))
                           (L.filter (\b -> connectType b == MQTTConnection) $ brokers conf)
   liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups1')
-  let tups1 = [t | (Right t) <- (L.filter isRight tups1')]
+  let tups1 = [t | (Right t) <- L.filter isRight tups1']
 
   -- update active brokers
   liftIO . atomically $ writeTVar (activeMQTT bridge) (Map.fromList tups1)
@@ -148,11 +154,34 @@ newEnv2 = do
             subscribe mc (fwds `L.zip` L.repeat subOptions) []) tups1
 
   -- connect to TCP
-  tups2' <- liftIO $ mapM (runReaderT (runExceptT getSocket))
+  socksWithName' <- liftIO $ mapM (runReaderT (runExceptT getSocket))
                          (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
-  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
-  let tups2 = [t | (Right t) <- (L.filter isRight tups2')]
+  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft socksWithName')
+  let socksWithName = [t | (Right t) <- L.filter isRight socksWithName']
+
+  tups2' <- liftIO $ mapM getClientID socksWithName
+  let tups2 = [t | (Right t) <- L.filter isRight tups2']
+
   liftIO . atomically $ writeTVar (activeTCP bridge) (Map.fromList tups2)
 
   -- commit changes
   put $ Env bridge conf logger
+
+
+getClientID :: (BrokerName, Socket) -> IO (Either SomeException (BrokerName, (Socket,UUID)))
+getClientID (n, s) = do
+  e_uuid <- try $ do
+    HESP.sendMsg s $ HESP.mkArrayFromList
+      [ HESP.mkBulkString "hi"
+      , HESP.mkMapFromList [ (HESP.mkBulkString "pub-level",  HESP.Integer 1)
+                           , (HESP.mkBulkString "pub-method", HESP.Integer 0)
+                           ]
+      ]
+    acks <- HESP.recvMsgs s 1024
+    let (Right ack) = V.head acks
+        HESP.MatchArray ms = ack
+        HESP.MatchBulkString uuid = (V.!) ms 2
+    return $ fromJust $ UUID.fromASCIIBytes uuid
+  case e_uuid of
+    Left e -> return $ Left e
+    Right uuid -> return $ Right (n, (s, uuid))

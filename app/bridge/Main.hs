@@ -20,6 +20,9 @@ import           Data.Either                     (isLeft, isRight)
 import qualified Data.List                       as L
 import qualified Data.Map                        as Map
 import           Data.Maybe                      (fromJust)
+import           Data.UUID
+import qualified Data.UUID              as UUID
+import qualified Data.UUID.V4           as UUID
 import           Network.MQTT.Bridge.Environment
 import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.RestAPI
@@ -53,7 +56,7 @@ main = do
       logging logger INFO $ "Active TCP connections: \n" ++ L.intercalate "\n" (Map.keys initTCPs)
 
       mapM_ (`processMQTT` env) (Map.toList initMCs)
-      mapM_ (`processTCP` env) (Map.toList initTCPs)
+      mapM_ (`processTCP`  env) (Map.toList initTCPs)
 
       forkFinally (forever $ maintainConns True True env)
         (\e -> logging logger WARNING "Connection maintaining thread failed.")
@@ -97,8 +100,10 @@ maintainConns warnFlag runProcess env@(Env Bridge{..} conf logger) = do
   when (not (L.null missedTCPNs) && warnFlag) $
     logging logger WARNING $
       printf "Lost TCP connections: %s . Retrying..." (show missedTCPNs)
-  tups2' <- mapM (runReaderT (runExceptT getSocket)) missedTCPs
-  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups2')
+  socksWithName' <- mapM (runReaderT (runExceptT getSocket)) missedTCPs
+  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft socksWithName')
+  let socksWithName = [t | (Right t) <- L.filter isRight socksWithName']
+  tups2' <- mapM getClientID socksWithName
   let tups2 = [t | (Right t) <- L.filter isRight tups2']
   atomically $ modifyTVar activeTCP (Map.union (Map.fromList tups2))
   when runProcess $ mapM_ (`processTCP` env) tups2
@@ -149,10 +154,10 @@ runMQTT (n, mc) env@(Env Bridge{..} conf logger) = do
 
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain TCP connection.
-processTCP :: (BrokerName, Socket)
+processTCP :: (BrokerName, (Socket,UUID))
         -> Env
         -> IO ()
-processTCP tup@(n, s) env@(Env Bridge{..} _ logger) = do
+processTCP tup@(n, (s,cid)) env@(Env Bridge{..} _ logger) = do
     forkFinally (runTCP tup env) handleException
     return ()
   where
@@ -168,10 +173,10 @@ processTCP tup@(n, s) env@(Env Bridge{..} _ logger) = do
 -- from/to a certain TCP connection.
 -- It is bridge-scoped and does not care about specific behaviours
 -- of servers, which is provided by fwdTCPMessage' and 'recvTCPMessge'.
-runTCP :: (BrokerName, Socket)
+runTCP :: (BrokerName, (Socket,UUID))
     -> Env
     -> IO ()
-runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
+runTCP (n, (s,cid)) (Env Bridge{..} Config{..} logger) = do
     ch <- atomically $ dupTChan broadcastChan
     race (receiving ch) (forwarding ch)
     return ()
@@ -198,12 +203,12 @@ runTCP (n, s) (Env Bridge{..} Config{..} logger) = do
     forwarding ch = forever $ do
       msg <- atomically (readTChan ch)
       case msg of
-        PlainMsg _ t -> when (t `existMatch` subs) $ do
-          fwdTCPMessage s msg
+        PlainMsg p t -> when (t `existMatch` subs) $ do
+          fwdTCPMessage (s,cid) t p
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
         PubPkt PublishRequest{..} n -> when (crossForward && blToText _pubTopic `existMatch` subs) $ do
-          fwdTCPMessage s msg
+          fwdTCPMessage (s,cid) (blToText _pubTopic) _pubBody
           logging logger INFO $ printf "[TCP]  Forwarded   [%s]." (show msg)
           inc (tcpMsgFwdCounter counters)
         _            -> return ()
