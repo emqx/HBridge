@@ -51,6 +51,7 @@ dependencies:
 - servant
 - servant-server
 - hesp
+- uuid
 
 library:
   source-dirs: src
@@ -66,18 +67,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - HBridge
-
-#  monitor:
-#    main:                Main.hs
-#    source-dirs:         app/monitor
-#    ghc-options:
-#    - -threaded
-#    - -rtsopts
-#    - -with-rtsopts=-N
-#    dependencies:
-#    - HBridge
-
-
 
 tests:
   HBridge-test:
