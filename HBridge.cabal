@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 06ec4080d0fe6a8dbbeea92b9dd7dbbb8e1e672483c897f60e4df377958cfac2
+-- hash: 2bd4e34b25b4de93cf3cef48e2810143124d5e8b18b0b8af9b12923a9e287c2a
 
 name:           HBridge
 version:        0.0.1
@@ -60,6 +60,7 @@ library
     , text
     , time
     , unordered-containers
+    , uuid
     , vector
     , wai
     , warp
@@ -98,6 +99,7 @@ executable HBridge
     , text
     , time
     , unordered-containers
+    , uuid
     , vector
     , wai
     , warp
@@ -137,6 +139,7 @@ test-suite HBridge-test
     , text
     , time
     , unordered-containers
+    , uuid
     , vector
     , wai
     , warp
