@@ -197,7 +197,7 @@ runTCP (n, (s,cid)) (Env Bridge{..} Config{..} logger) = do
       _                   -> return ()
 
     receiving ch = forever $ do
-      msgs <- recvTCPMessages s 128
+      msgs <- recvTCPMessages s 1024
       mapM_ (processRecvMsgs ch) msgs
 
     forwarding ch = forever $ do
