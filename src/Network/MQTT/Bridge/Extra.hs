@@ -20,6 +20,7 @@ module Network.MQTT.Bridge.Extra
 import           Control.Exception
 import           Data.Aeson
 import qualified Data.ByteString                  as BS
+import           Data.ByteString                  (ByteString)
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as HM
 import qualified Data.List                        as L
@@ -31,6 +32,7 @@ import qualified Data.UUID              as UUID
 import qualified Data.UUID.V4           as UUID
 import qualified Data.Vector                      as V
 import qualified Network.HESP                     as HESP
+import qualified Network.HESP.Commands            as HESP
 import           Network.MQTT.Bridge.SQL.AbsESQL
 import           Network.MQTT.Bridge.SQL.ErrM
 import           Network.MQTT.Bridge.SQL.ParESQL
@@ -223,9 +225,9 @@ recvBridgeMsgs s n = do
     processMsg' msg' = case msg' of
       Left _ -> return Nothing
       Right msg ->
-        case msg of
-          HESP.MatchSimpleString bs -> return $ decode (BL.fromStrict bs)
-          _                         -> return Nothing
+        case parseRequest msg of
+          Left _ -> return Nothing
+          Right (SPut topic payload) -> return $ Just $ PlainMsg payload topic
 
 sendBridgeMsg :: (Socket,UUID) -> Topic -> BL.ByteString -> IO ()
 sendBridgeMsg (s,cid) topic payload = do
@@ -235,3 +237,21 @@ sendBridgeMsg (s,cid) topic payload = do
     , HESP.mkBulkString $ encodeUtf8 topic
     , HESP.mkBulkString $ BL.toStrict payload
     ]
+
+--------------------------
+data TCPReqType = SPut Topic BL.ByteString
+  deriving (Show, Eq)
+
+parseRequest :: HESP.Message
+             -> Either ByteString TCPReqType
+parseRequest msg = do
+  (n, paras) <- HESP.commandParser msg
+  case n of
+    "sput" -> parseSPut paras
+    _      -> Left $ "Unrecognized request " <> n <> "."
+
+parseSPut :: V.Vector HESP.Message -> Either ByteString TCPReqType
+parseSPut paras = do
+  topic   <- HESP.extractBulkStringParam "Topic"     paras 0
+  payload <- HESP.extractBulkStringParam "Payload"   paras 1
+  return $ SPut (decodeUtf8 topic) (BL.fromStrict payload)

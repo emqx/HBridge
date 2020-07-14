@@ -45,7 +45,7 @@ extra-deps:
   #- net-mqtt-0.6.2.3
   - net-mqtt-0.7.0.1
   - git: https://github.com/hstream-io/hesp.git
-    commit: 148fca011a8eccb8794871d0d46e9e0a473549bf
+    commit: ac22865e0b4cc216941582b2da9f360918b98333
 
 
   # - acme-missiles-0.3
