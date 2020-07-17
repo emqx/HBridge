@@ -28,37 +28,19 @@ HBridge also provides some extra features:
 ## Build and Test
 
 ### Build
-To build from source, haskell build tool `stack` is required. Type
+To build from source, haskell build tool `stack` or `cabal` is required.
+
+With `stack`:
+
 ```
 $ stack build
 ```
 
-### Test
+With `cabal`:
 
-There is a very simple test program in `test/Spec.hs`. To run the test with default configuration, it requires several MQTT brokers at running status. We recommend `EMQ X` broker:
 ```
-$ docker run -d --name emqx1883 -p 1883:1883 -p 8083:8083 -p 8883:8883 -p 8084:8084 -p 18083:18083 emqx/emqx
-$ docker run -d --name emqx1885 -p 1885:1883 -p 8085:8083 -p 8885:8883 -p 8086:8084 -p 18085:18083 emqx/emqx
+$ cabal new-build
 ```
-
-Then run the test program:
-```
-$ stack test
-```
-
-Now the main program can be executed:
-```
-$ stack run -- HBridge --config etc/config.yaml +RTS -T
-```
-
-In this example, there exists two MQTT brokers `B1` and `B2` and two TCP ones `B3` and `B4` that connects to the bridge. The bridge forwards messages from `B1` and `B2` to other brokers. Also, `B3` sends messages to `B4` and vice versa.
-
-The system running status can be found at `localhost:22333`. This is provided by `ekg` package. `+RTS -T` is not required if you do not need this function.
-
-The status of the bridge can be obtained by
-
-- `curl -X GET localhost:8999/funcs`
-- `curl -X GET localhost:8999/metrics`
 
 ## Configuration
 
