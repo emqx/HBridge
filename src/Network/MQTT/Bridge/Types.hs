@@ -53,8 +53,8 @@ import qualified Data.Yaml              as Y
 import           GHC.Generics
 import           Network.MQTT.Client
 import           Network.MQTT.Types
-import           Network.URI
 import           Network.Simple.TCP
+import           Network.URI
 import           Options.Applicative
 import           System.IO
 import           System.Metrics.Counter

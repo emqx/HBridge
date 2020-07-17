@@ -19,8 +19,8 @@ module Network.MQTT.Bridge.Extra
 
 import           Control.Exception
 import           Data.Aeson
-import qualified Data.ByteString                  as BS
 import           Data.ByteString                  (ByteString)
+import qualified Data.ByteString                  as BS
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as HM
 import qualified Data.List                        as L
@@ -28,8 +28,8 @@ import qualified Data.Map                         as Map
 import           Data.Text
 import           Data.Text.Encoding
 import           Data.UUID
-import qualified Data.UUID              as UUID
-import qualified Data.UUID.V4           as UUID
+import qualified Data.UUID                        as UUID
+import qualified Data.UUID.V4                     as UUID
 import qualified Data.Vector                      as V
 import qualified Network.HESP                     as HESP
 import qualified Network.HESP.Commands            as HESP
@@ -240,7 +240,7 @@ sendBridgeMsg (s,cid) topic payload = do
 
 --------------------------
 data TCPReqType = SPut Topic BL.ByteString
-  deriving (Show, Eq)
+    deriving (Show, Eq)
 
 parseRequest :: HESP.Message
              -> Either ByteString TCPReqType

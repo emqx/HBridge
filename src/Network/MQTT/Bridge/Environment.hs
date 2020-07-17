@@ -25,9 +25,10 @@ import           Data.Map                  as Map
 import           Data.Maybe                (fromJust, isJust, isNothing)
 import           Data.Time
 import           Data.UUID
-import qualified Data.UUID              as UUID
-import qualified Data.UUID.V4           as UUID
+import qualified Data.UUID                 as UUID
+import qualified Data.UUID.V4              as UUID
 import qualified Data.Vector               as V
+import qualified Network.HESP              as HESP
 import           Network.MQTT.Bridge.Extra
 import           Network.MQTT.Bridge.Types
 import           Network.MQTT.Client
@@ -36,7 +37,6 @@ import           Network.Simple.TCP
 import           Network.URI
 import           System.Metrics.Counter
 import           Text.Printf
-import qualified Network.HESP              as HESP
 
 
 -- | Create a TCP connection and return the handle with broker name.
@@ -183,5 +183,5 @@ getClientID (n, s) = do
         HESP.MatchBulkString uuid = (V.!) ms 2
     return $ fromJust $ UUID.fromASCIIBytes uuid
   case e_uuid of
-    Left e -> return $ Left e
+    Left e     -> return $ Left e
     Right uuid -> return $ Right (n, (s, uuid))
