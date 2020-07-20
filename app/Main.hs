@@ -9,32 +9,40 @@
 
 module Main where
 
-import           Control.Concurrent
-import           Control.Concurrent.Async
-import           Control.Concurrent.STM
-import           Control.Monad
-import           Control.Monad.Except
-import           Control.Monad.Reader
-import           Control.Monad.State
-import           Data.Either                     (isLeft, isRight)
-import qualified Data.List                       as L
-import qualified Data.Map                        as Map
-import           Data.Maybe                      (fromJust)
-import           Data.UUID
-import qualified Data.UUID              as UUID
-import qualified Data.UUID.V4           as UUID
-import           Network.MQTT.Bridge.Environment
-import           Network.MQTT.Bridge.Extra
-import           Network.MQTT.Bridge.RestAPI
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.Simple.TCP
-import           Network.Wai.Handler.Warp
+import           Control.Concurrent         (forkFinally, threadDelay)
+import           Control.Concurrent.Async   (async, race)
+import           Control.Concurrent.STM     ( readTVarIO, modifyTVar, readTChan
+                                            , writeTChan, dupTChan, atomically)
+import           Control.Monad              (forever, when)
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Except       (runExceptT)
+import           Control.Monad.Reader       (runReaderT)
+import           Control.Monad.State        (execStateT)
+import           Data.Either                (isLeft, isRight)
+import qualified Data.List                  as L
+import qualified Data.Map                   as Map
+import           Data.Maybe                 (fromJust)
+import           Data.UUID                  (UUID)
+import           Network.MQTT.Bridge.Environment ( newEnv1, newEnv2, getMQTTClient
+                                                 , getSocket, getClientID
+                                                 , callbackFunc)
+import           Network.MQTT.Bridge.Extra   ( blToText, textToBL, existMatch
+                                             , composeMP, recvTCPMessages
+                                             , fwdTCPMessage)
+import           Network.MQTT.Bridge.RestAPI (apiApp)
+import           Network.MQTT.Bridge.Types   (BrokerName, Broker(..), Bridge(..)
+                                             , Config(..), Env(..), Message(..)
+                                             , ConnectionType(..), parseConfig
+                                             , MsgCounter(..)
+                                             , Priority(..), logging, logProcess)
+import           Network.MQTT.Client         (MQTTClient, pubAliased, subscribe)
+import           Network.MQTT.Types          (PublishRequest(..), subOptions)
+import qualified Network.Simple.TCP          as TCP
+import qualified Network.Wai.Handler.Warp    as Warp
 import           Prelude                         hiding (read)
-import           System.Metrics.Counter
-import           System.Remote.Monitoring        hiding (Server)
-import           Text.Printf
+import           System.Metrics.Counter      (inc)
+import qualified System.Remote.Monitoring   as Monitoring
+import           Text.Printf                 (printf)
 
 
 main :: IO ()
@@ -43,12 +51,12 @@ main = do
   case conf' of
     Left e -> error e
     Right conf -> do
-      forkServer "localhost" 22333
+      Monitoring.forkServer "localhost" 22333
       env' <- runReaderT newEnv1 conf
       env@(Env bridge _ logger) <- execStateT newEnv2 env'
       forkFinally (logProcess logger) (\_ -> putStrLn "[Warning] Log service failed.")
 
-      async (run 8999 (apiApp env))
+      async (Warp.run 8999 (apiApp env))
 
       initMCs <- readTVarIO (activeMQTT bridge)
       logging logger INFO $ "Connected to brokers:\n" ++ L.intercalate "\n" (Map.keys initMCs)
@@ -154,7 +162,7 @@ runMQTT (n, mc) env@(Env Bridge{..} conf logger) = do
 
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain TCP connection.
-processTCP :: (BrokerName, (Socket,UUID))
+processTCP :: (BrokerName, (TCP.Socket,UUID))
         -> Env
         -> IO ()
 processTCP tup@(n, (s,cid)) env@(Env Bridge{..} _ logger) = do
@@ -165,7 +173,7 @@ processTCP tup@(n, (s,cid)) env@(Env Bridge{..} _ logger) = do
         Left e -> do
           atomically $ modifyTVar activeTCP (Map.delete n)
           logging logger WARNING $ printf "[TCP]  Broker %s disconnected (%s)" n (show e)
-          closeSock s
+          TCP.closeSock s
           return ()
         _     -> return ()
 
@@ -173,7 +181,7 @@ processTCP tup@(n, (s,cid)) env@(Env Bridge{..} _ logger) = do
 -- from/to a certain TCP connection.
 -- It is bridge-scoped and does not care about specific behaviours
 -- of servers, which is provided by fwdTCPMessage' and 'recvTCPMessge'.
-runTCP :: (BrokerName, (Socket,UUID))
+runTCP :: (BrokerName, (TCP.Socket,UUID))
     -> Env
     -> IO ()
 runTCP (n, (s,cid)) (Env Bridge{..} Config{..} logger) = do

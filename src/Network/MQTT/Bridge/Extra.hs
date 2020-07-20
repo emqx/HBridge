@@ -17,19 +17,18 @@ module Network.MQTT.Bridge.Extra
   , sendBridgeMsg
   ) where
 
-import           Control.Exception
-import           Data.Aeson
+import           Control.Exception                (SomeException, try)
+import           Data.Aeson                       (Value(..), Object, encode, decode)
 import           Data.ByteString                  (ByteString)
-import qualified Data.ByteString                  as BS
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as HM
 import qualified Data.List                        as L
 import qualified Data.Map                         as Map
-import           Data.Text
-import           Data.Text.Encoding
-import           Data.UUID
+import           Data.Text                        (Text)
+import qualified Data.Text                        as Text
+import           Data.Text.Encoding               (encodeUtf8, decodeUtf8)
+import           Data.UUID                        (UUID)
 import qualified Data.UUID                        as UUID
-import qualified Data.UUID.V4                     as UUID
 import qualified Data.Vector                      as V
 import qualified Network.HESP                     as HESP
 import qualified Network.HESP.Commands            as HESP
@@ -37,12 +36,10 @@ import           Network.MQTT.Bridge.SQL.AbsESQL
 import           Network.MQTT.Bridge.SQL.ErrM
 import           Network.MQTT.Bridge.SQL.ParESQL
 import           Network.MQTT.Bridge.SQL.SkelESQL
-import           Network.MQTT.Bridge.Types
-import           Network.MQTT.Client
-import           Network.MQTT.Topic
-import           Network.MQTT.Types
+import           Network.MQTT.Bridge.Types        (Message(..), FuncSeries)
+import           Network.MQTT.Topic               (Topic, match)
+import           Network.MQTT.Types               (PublishRequest(..))
 import           Network.Simple.TCP               as TCP
-
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
 lookup' ParsedProg{..} n o = case a1 of
@@ -52,10 +49,10 @@ lookup' ParsedProg{..} n o = case a1 of
            _       -> a2
   where
     a1 = HM.lookup n o
-    n' = (Map.!) sel (unpack n)
+    n' = (Map.!) sel (Text.unpack n)
     a2 = case n' of
            Nothing  -> Nothing
-           Just n'' -> HM.lookup (pack n'') o
+           Just n'' -> HM.lookup (Text.pack n'') o
 
 processCond :: ParsedProg -> Message -> Object -> Cond -> Bool
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondEQ i v)
@@ -66,13 +63,13 @@ processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondEQ i v)
                       Bool b -> _pubRetain == b
                       _      -> False
   | l == "QoS" = case r of
-                   String t -> _pubQoS == read (unpack t)
+                   String t -> _pubQoS == read (Text.unpack t)
                    _        -> False
   | otherwise = case lookup' pp l o of
                   Nothing   -> False
                   (Just v') -> r == v'
   where
-    l = pack . transIdent $ i
+    l = Text.pack . transIdent $ i
     r = transVar v
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondNE i v)
   | l == "topic" = case r of
@@ -82,42 +79,42 @@ processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondNE i v)
                       Bool b -> _pubRetain /= b
                       _      -> False
   | l == "QoS" = case r of
-                   String t -> _pubQoS /= read (unpack t)
+                   String t -> _pubQoS /= read (Text.unpack t)
                    _        -> False
   | otherwise = case lookup' pp l o of
                   Nothing   -> False
                   (Just v') -> r /= v'
   where
-    l = pack . transIdent $ i
+    l = Text.pack . transIdent $ i
     r = transVar v
 processCond    ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondMt i r)
-  | l == "topic" = pack r `match` blToText _pubTopic
+  | l == "topic" = Text.pack r `match` blToText _pubTopic
   | otherwise = False
   where
-    l = pack . transIdent $ i
+    l = Text.pack . transIdent $ i
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondGT i v)
   | l == "topic" = False
   | l == "retain" = False
   | l == "QoS" = case r of
-                   String t -> _pubQoS < read (unpack t)
+                   String t -> _pubQoS < read (Text.unpack t)
                    _        -> False
   | otherwise = case lookup' pp l o of
                   Nothing   -> False
                   (Just v') -> r < v'
   where
-    l = pack . transIdent $ i
+    l = Text.pack . transIdent $ i
     r = transVar v
 processCond pp@ParsedProg{..} (PubPkt PublishRequest{..} _) o (ECondLE i v)
   | l == "topic" = False
   | l == "retain" = False
   | l == "QoS" = case r of
-                   String t -> _pubQoS > read (unpack t)
+                   String t -> _pubQoS > read (Text.unpack t)
                    _        -> False
   | otherwise = case lookup' pp l o of
                   Nothing   -> False
                   (Just v') -> v' < r
   where
-    l = pack . transIdent $ i
+    l = Text.pack . transIdent $ i
     r = transVar v
 
 processModify :: (String, Value) -> Message -> Message
@@ -130,7 +127,7 @@ processModify (s,v) msg@(PubPkt req@PublishRequest{..} n)
                       _      -> msg
   | s == "QoS" = case v of
                    String t -> if t `elem` ["QoS0","QoS1","QoS2"]
-                               then PubPkt req{_pubQoS = read (unpack t)} n
+                               then PubPkt req{_pubQoS = read (Text.unpack t)} n
                                else msg
                    _ -> msg
   | otherwise = msg
@@ -141,14 +138,14 @@ progToFunc pp@ParsedProg{..} msg@(PubPkt req@PublishRequest{..} n) = do
   case obj' of
     Just obj -> do
       let newobj = if "*" `HM.member` obj then obj else
-                     HM.filterWithKey (\k _ -> k `L.elem` (pack <$> Map.keys sel)) obj
+                     HM.filterWithKey (\k _ -> k `L.elem` (Text.pack <$> Map.keys sel)) obj
           condSat = case whr of
             Nothing -> True
             Just conds -> L.all (== True) (processCond pp msg newobj <$> conds)
           msg'' = case mod of
             Nothing -> msg
             Just mods -> if condSat then
-              let modObj = L.foldr (\(s,v) acc -> HM.update (Just . const v) (pack s) acc) newobj mods
+              let modObj = L.foldr (\(s,v) acc -> HM.update (Just . const v) (Text.pack s) acc) newobj mods
                   msg' = PubPkt req{_pubBody = encode modObj} n
               in L.foldr processModify msg' mods
               else msg
@@ -180,7 +177,7 @@ existMatch t ts =  True `elem` [pat `match` t | pat <- ts]
 
 -- | Compose a mountpoint with a topic
 composeMP :: Topic -> Topic -> Topic
-composeMP = append
+composeMP = Text.append
 
 blToText :: BL.ByteString -> Text
 blToText = decodeUtf8 . BL.toStrict
