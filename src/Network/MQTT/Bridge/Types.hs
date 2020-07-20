@@ -32,33 +32,36 @@ module Network.MQTT.Bridge.Types
   , runFuncSeries
   ) where
 
-import           Control.Concurrent.STM
-import           Control.Exception
-import           Control.Monad
-import           Control.Monad.Except
-import           Control.Monad.State
-import           Control.Monad.Writer
-import           Data.Aeson
+import           Control.Concurrent.STM ( TVar, TChan, newTChanIO, readTChan
+                                        , writeTChan, atomically)
+import           Control.Exception      (SomeException, try)
+import           Control.Monad          (when, forever, foldM)
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Except   (ExceptT, throwError, runExceptT)
+import           Control.Monad.State    (StateT, runStateT)
+import           Control.Monad.Writer   (WriterT, runWriterT)
+import           Data.Aeson             (FromJSON(..), ToJSON, Value(..))
 import qualified Data.ByteString.Lazy   as BL
 import           Data.Int               (Int64)
 import qualified Data.List              as L
-import           Data.Map
+import qualified Data.Map               as Map
 import           Data.Maybe             (fromJust, isNothing)
-import           Data.Text.Encoding
-import           Data.Time
-import           Data.UUID
-import qualified Data.UUID              as UUID
-import qualified Data.UUID.V4           as UUID
-import qualified Data.Yaml              as Y
-import           GHC.Generics
-import           Network.MQTT.Client
-import           Network.MQTT.Types
-import           Network.Simple.TCP
-import           Network.URI
-import           Options.Applicative
-import           System.IO
-import           System.Metrics.Counter
-import           Text.Printf
+import           Data.Text.Encoding     (encodeUtf8, decodeUtf8)
+import           Data.Time              (UTCTime, getCurrentTime)
+import           Data.UUID              (UUID)
+import qualified Data.Yaml              as Yaml
+import           GHC.Generics           (Generic)
+import           Network.MQTT.Client    (Topic, MQTTClient)
+import           Network.MQTT.Types     (PublishRequest(..), QoS(..), Property(..))
+import           Network.Simple.TCP     (Socket)
+import           Network.URI            (URI, URIAuth, parseURI)
+import           Options.Applicative    ( Parser, execParser, strOption, long
+                                        , short, metavar, help, info, helper
+                                        , fullDesc, progDesc, header, (<**>))
+import           System.IO              ( Handle, IOMode(WriteMode), openFile, stderr
+                                        , hPutStrLn)
+import           System.Metrics.Counter (Counter)
+import           Text.Printf            (printf)
 
 type BrokerName  = String
 type FwdsTopics  = [Topic]
@@ -66,13 +69,13 @@ type SubsTopics  = [Topic]
 
 -- | Message type. The payload part is in 'ByteString'
 -- type currently but can be modified soon.
-data Message = PlainMsg
-    { payload :: BL.ByteString
-    , topic   :: Topic
-    }
-    | PubPkt PublishRequest BrokerName
-    deriving (Show, Generic)
-
+data Message =
+  PlainMsg
+  { payload :: BL.ByteString
+  , topic   :: Topic
+  }
+  | PubPkt PublishRequest BrokerName
+  deriving (Show, Generic)
 
 instance Ord Value where
   (Object _)  <= (Object _)  = True
@@ -112,12 +115,11 @@ deriving instance ToJSON PublishRequest
 deriving instance FromJSON Message
 deriving instance ToJSON Message
 
-
 -- | Type of connections. Sometimes TCP and MQTT
 -- connections are both called "brokers".
 data ConnectionType = TCPConnection
-    | MQTTConnection
-    deriving (Show, Eq, Generic, FromJSON, ToJSON)
+                    | MQTTConnection
+                    deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 -- | A broker. It contains only static information so
 -- it can be formed directly from config file without
@@ -159,25 +161,22 @@ configP = strOption
 -- | Parse a config file. It may fail and throw an exception.
 parseConfig :: ExceptT String IO Config
 parseConfig = do
-    f <- liftIO $ execParser opts
-
-    conf' <- liftIO $ Y.decodeFileEither f
-    conf <- case conf' of
+    f      <- liftIO $ execParser opts
+    e_conf <- liftIO $ Yaml.decodeFileEither f
+    conf   <- case e_conf of
       Left e     -> throwError (show e)
       Right conf -> return conf
-
-    let uri' = brokerURI <$> brokers conf
-        uri  = parseURI  <$> uri'
-    when (Nothing `L.elem` uri)
+    let uriStrs = brokerURI <$> brokers conf
+        m_uris  = parseURI  <$> uriStrs
+    when (Nothing `L.elem` m_uris)
       (throwError $ printf "Invalid URI: %s."
-                           (uri' !! (fromJust $ L.findIndex isNothing uri)) )
+        (uriStrs !! fromJust (L.findIndex isNothing m_uris)))
     return conf
   where
     opts = info (configP <**> helper)
       (  fullDesc
       <> progDesc "Run an instance of bridge with certain configuration file"
       <> header   "HBridge - a multi-way MQTT/TCP message bridge" )
-
 
 -- | Counter of messages
 data MsgCounter = MsgCounter
@@ -193,13 +192,13 @@ data MsgCounter = MsgCounter
 data Bridge = Bridge
     { startTime     :: UTCTime -- ^ System start time
     -- ^ Active connections to MQTT brokers
-    , activeMQTT    :: TVar (Map BrokerName MQTTClient)
+    , activeMQTT    :: TVar (Map.Map BrokerName MQTTClient)
     -- ^ Active TCP connections
-    , activeTCP     :: TVar (Map BrokerName (Socket, UUID))
+    , activeTCP     :: TVar (Map.Map BrokerName (Socket, UUID))
     -- ^ Topic rules
-    , rules         :: Map BrokerName (FwdsTopics, SubsTopics)
+    , rules         :: Map.Map BrokerName (FwdsTopics, SubsTopics)
     -- ^ Mount points
-    , mountPoints   :: Map BrokerName Topic
+    , mountPoints   :: Map.Map BrokerName Topic
     -- ^ Broadcast channel
     , broadcastChan :: TChan Message
     -- ^ Processing functions
