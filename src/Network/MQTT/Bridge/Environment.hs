@@ -14,38 +14,39 @@ module Network.MQTT.Bridge.Environment
   , getClientID
   ) where
 
-import           Control.Concurrent.STM    ( newTVarIO, readTVarIO, newBroadcastTChanIO
-                                           , atomically, writeTVar, writeTChan)
+import qualified Colog
+import           Control.Concurrent.STM    (atomically, newBroadcastTChanIO,
+                                            newTVarIO, readTVarIO, writeTChan,
+                                            writeTVar)
 import           Control.Exception         (SomeException, try)
-import           Control.Monad             (when, replicateM)
-import           Control.Monad.Except      (ExceptT, throwError, runExceptT)
+import           Control.Monad             (replicateM, when)
+import           Control.Monad.Except      (ExceptT, runExceptT, throwError)
 import           Control.Monad.IO.Class    (liftIO)
-import           Control.Monad.Reader      (ReaderT, runReaderT, ask)
-import           Control.Monad.State       (StateT, get, put)
+import           Control.Monad.Reader      (ReaderT, ask, runReaderT)
 import           Data.Either               (isLeft, isRight)
 import qualified Data.List                 as L
 import           Data.Map                  as Map
 import           Data.Maybe                (fromJust, isJust, isNothing)
+import qualified Data.Text                 as Text
 import           Data.Time                 (getCurrentTime)
 import           Data.UUID                 (UUID)
 import qualified Data.UUID                 as UUID
 import qualified Data.Vector               as V
 import qualified Network.HESP              as HESP
 import           Network.MQTT.Bridge.Extra
-import           Network.MQTT.Bridge.Types ( BrokerName, Broker(..), Config(..)
-                                           , Bridge(..), Env(..), Message(..)
-                                           , Priority(..), mkLogger, logging
-                                           , ConnectionType(..), MsgCounter(..)
-                                           , runFuncSeries)
-import           Network.MQTT.Client       ( MQTTClient, MQTTConfig(..), connectURI
-                                           , mqttConfig, MessageCallback(..)
-                                           , subscribe, )
-import           Network.MQTT.Types        ( PublishRequest, PublishRequest(..)
-                                           , subOptions)
+import           Network.MQTT.Bridge.Types (App, Bridge (..), Broker (..),
+                                            BrokerName, Config (..),
+                                            ConnectionType (..), Env (..),
+                                            Message (..), MsgCounter (..),
+                                            runApp, runFuncSeries)
+import           Network.MQTT.Client       (MQTTClient, MQTTConfig (..),
+                                            MessageCallback (..), connectURI,
+                                            mqttConfig, subscribe)
+import           Network.MQTT.Types        (PublishRequest (..), subOptions)
 import           Network.Simple.TCP        (Socket, connectSock)
-import           Network.URI               ( parseURI, uriRegName, uriAuthority
-                                           , uriPort)
-import           System.Metrics.Counter    (new, inc)
+import           Network.URI               (parseURI, uriAuthority, uriPort,
+                                            uriRegName)
+import           System.Metrics.Counter    (inc, new)
 import           Text.Printf               (printf)
 
 
@@ -57,8 +58,8 @@ getSocket :: ExceptT String (ReaderT Broker IO) (BrokerName, Socket)
 getSocket = do
   Broker{..} <- ask
   let uri   = fromJust . parseURI $ brokerURI
-  let host' = uriRegName       <$> uriAuthority uri
-      port' = L.tail . uriPort <$> uriAuthority uri
+  let host' = uriRegName         <$> uriAuthority uri
+      port' = L.tail . uriPort   <$> uriAuthority uri
   when (isNothing host' || isNothing port') $
     throwError $ printf "Invalid URI : %s ." (show uri)
   (s' :: Either SomeException Socket) <- liftIO . try $ do
@@ -91,12 +92,11 @@ getMQTTClient callback = do
     Right mc -> return (brokerName, mc)
 
 -- | Create basic bridge environment without connections created.
-newEnv1 :: ReaderT Config IO Env
+newEnv1 :: ReaderT (Config m) IO (Env m)
 newEnv1 = do
   time                      <- liftIO getCurrentTime
   [mqrc,mqfc,tctlc,trc,tfc] <- liftIO $ replicateM 5 new
-  conf@(Config bs _ _ _ _ sqls) <- ask
-  logger                    <- liftIO $ mkLogger conf
+  conf@(Config bs _ sqls _) <- ask
   ch                        <- liftIO newBroadcastTChanIO
   activeMCs                 <- liftIO $ newTVarIO Map.empty
   activeTCPs                <- liftIO $ newTVarIO Map.empty
@@ -109,73 +109,78 @@ newEnv1 = do
   return $ Env
     { envBridge = Bridge time activeMCs activeTCPs rules mps ch funcs cnts
     , envConfig = conf
-    , envLogger = logger
     }
 
-callbackFunc :: Env -> LowLevelCallbackType
-callbackFunc Env{..} n mc pubReq = do
-  logging envLogger INFO $ printf "Received    [%s]." (show $ PubPkt pubReq n)
-  inc (mqttRecvCounter (counters envBridge))
+callbackFunc :: Env m
+             -> BrokerName
+             -> MQTTClient
+             -> PublishRequest
+             -> App ()
+callbackFunc Env{..} n _ pubReq = do
+  Colog.logDebug . Text.pack $
+    printf "Received    [%s]." (show $ PubPkt pubReq n)
+  liftIO $ inc (mqttRecvCounter (counters envBridge))
   -- message transformation
-  funcs' <- readTVarIO (functions envBridge)
+  funcs' <- liftIO $ readTVarIO (functions envBridge)
   let ch    = broadcastChan envBridge
       mps   = mountPoints envBridge
       funcs = snd <$> funcs'
       mp    = fromJust (Map.lookup n mps)
-  ((msg', s), l) <- runFuncSeries (PubPkt pubReq n) funcs
+  ((msg',_) ,_) <- liftIO $ runFuncSeries (PubPkt pubReq n) funcs
   case msg' of
-    Left e      -> logging envLogger WARNING $ printf "Message transformation failed: [%s]."
-                                                      (show $ PubPkt pubReq n)
+    Left _      -> Colog.logWarning . Text.pack $
+      printf "Message transformation failed: [%s]." (show $ PubPkt pubReq n)
     Right msg'' -> do
-      logging envLogger INFO $ printf "Message transformation succeeded: [%s] to [%s]."
-                                      (show $ PubPkt pubReq n)
-                                      (show msg'')
+      Colog.logDebug . Text.pack $
+        printf "Message transformation succeeded: [%s] to [%s]."
+               (show $ PubPkt pubReq n)
+               (show msg'')
       -- mountpoint
       case msg'' of
         PubPkt pubReq'' n'' -> do
           let msgMP = PubPkt pubReq''{_pubTopic = textToBL $
-                             mp `composeMP` (blToText (_pubTopic pubReq''))} n''
-          atomically $ writeTChan ch msgMP
-          logging envLogger INFO $ printf "Mountpoint added: [%s]." (show msgMP)
-        _ -> atomically $ writeTChan ch msg''
-
+                             mp `composeMP` blToText (_pubTopic pubReq'')} n''
+          liftIO . atomically $ writeTChan ch msgMP
+          Colog.logDebug . Text.pack $ printf "Mountpoint added: [%s]." (show msgMP)
+        _ -> liftIO . atomically $ writeTChan ch msg''
 
 -- | Update the bridge environment from the old one with
 -- connections created.
-newEnv2 :: StateT Env IO ()
-newEnv2 = do
-  env@(Env bridge conf logger) <- get
 
+newEnv2 :: App (Env App)
+newEnv2  = do
+  env@(Env bridge conf) <- ask
   -- connect to MQTT
-  tups1' <- liftIO $ mapM (runReaderT (runExceptT (getMQTTClient (callbackFunc env))))
-                          (L.filter (\b -> connectType b == MQTTConnection) $ brokers conf)
-  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft tups1')
+  tups1' <- liftIO $
+    mapM (runReaderT
+           (runExceptT
+             (getMQTTClient
+               (\n mc pubReq -> runApp env (callbackFunc env n mc pubReq))
+             )
+           )
+         ) (L.filter (\b -> connectType b == MQTTConnection) $ brokers conf)
+  mapM_ (\(Left e) -> Colog.logWarning $ Text.pack e) (L.filter isLeft tups1')
   let tups1 = [t | (Right t) <- L.filter isRight tups1']
-
   -- update active brokers
   liftIO . atomically $ writeTVar (activeMQTT bridge) (Map.fromList tups1)
-
   -- subscribe
   liftIO $ mapM_ (\(n, mc) -> do
-            let (fwds, subs) = fromJust (Map.lookup n (rules bridge))
+            let (fwds,_) = fromJust (Map.lookup n (rules bridge))
             subscribe mc (fwds `L.zip` L.repeat subOptions) []) tups1
-
   -- connect to TCP
-  socksWithName' <- liftIO $ mapM (runReaderT (runExceptT getSocket))
-                         (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
-  liftIO $ mapM_ (\(Left e) -> logging logger WARNING e) (L.filter isLeft socksWithName')
+  socksWithName' <- liftIO $
+    mapM (runReaderT
+           (runExceptT getSocket)
+         ) (L.filter (\b -> connectType b == TCPConnection) $ brokers conf)
+  mapM_ (\(Left e) -> Colog.logWarning $ Text.pack e) (L.filter isLeft socksWithName')
   let socksWithName = [t | (Right t) <- L.filter isRight socksWithName']
-
   tups2' <- liftIO $ mapM getClientID socksWithName
   let tups2 = [t | (Right t) <- L.filter isRight tups2']
-
   liftIO . atomically $ writeTVar (activeTCP bridge) (Map.fromList tups2)
+  return $  Env bridge conf
 
-  -- commit changes
-  put $ Env bridge conf logger
-
-
-getClientID :: (BrokerName, Socket) -> IO (Either SomeException (BrokerName, (Socket,UUID)))
+getClientID :: (BrokerName, Socket)
+            -> IO (Either SomeException (BrokerName, (Socket,UUID)))
 getClientID (n, s) = do
   e_uuid <- try $ do
     HESP.sendMsg s $ HESP.mkArrayFromList

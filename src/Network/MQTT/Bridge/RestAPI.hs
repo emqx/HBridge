@@ -15,25 +15,25 @@ import           Control.Concurrent.STM    (readTVarIO)
 import           Control.Monad.IO.Class    (liftIO)
 import qualified Data.List                 as L
 import qualified Data.Map                  as Map
-import           Data.Proxy                (Proxy(..))
-import           Data.Time                 ( getCurrentTime, diffUTCTime
-                                           , formatTime, defaultTimeLocale)
-import           Network.MQTT.Bridge.Types ( Env(..), Metrics(..), MsgCounter(..)
-                                           , MsgNum(..), Broker(..), Bridge(..)
-                                           , Config(..))
+import           Data.Proxy                (Proxy (..))
+import           Data.Time                 (defaultTimeLocale, diffUTCTime,
+                                            formatTime, getCurrentTime)
+import           Network.MQTT.Bridge.Types (Bridge (..), Broker (..),
+                                            Config (..), Env (..), Metrics (..),
+                                            MsgCounter (..), MsgNum (..))
 import           Prelude                   hiding (read)
-import           Servant.API               (Get, JSON, (:>), (:<|>)(..))
+import           Servant.API               ((:<|>) (..), (:>), Get, JSON)
 import qualified Servant.Server            as Server
 import           System.Metrics.Counter    (read)
 
 
 type UserAPI = "funcs"   :> Get '[JSON] [String]
---          :<|> "funcs"   :> ReqBody '[JSON] Message :> Post '[JSON] String
+--        :<|> "funcs"   :> ReqBody '[JSON] Message :> Post '[JSON] String
           :<|> "metrics" :> Get '[JSON] Metrics
 
-httpServer :: Env -> Server.Server UserAPI
+httpServer :: Env m -> Server.Server UserAPI
 httpServer Env{..} = getFuncs
---                :<|> postFuncs
+--              :<|> postFuncs
                 :<|> getMetrics
   where
     getFuncs :: Server.Handler [String]
@@ -48,12 +48,15 @@ httpServer Env{..} = getFuncs
         tcpBs <- liftIO . readTVarIO $ activeTCP envBridge
         is    <- liftIO $ mapM read [mqrc,mqfc,tctlc,trc,tfc]
 
-        let runT = formatTime defaultTimeLocale "%D days, %H hours, %M minutes, %S seconds"
-                                                (diffUTCTime sysT startT)
+        let runT = formatTime defaultTimeLocale
+                   "%D days, %H hours, %M minutes, %S seconds"
+                   (diffUTCTime sysT startT)
             mqN  = Map.keys mqBs
             tcpN = Map.keys tcpBs
-            mqs  = L.concat $ (\n -> L.filter (\b -> brokerName b == n) (brokers envConfig)) <$> mqN
-            tcps = L.concat $ (\n -> L.filter (\b -> brokerName b == n) (brokers envConfig)) <$> tcpN
+            mqs  = L.concat $
+              (\n -> L.filter (\b -> brokerName b == n) (brokers envConfig)) <$> mqN
+            tcps = L.concat $
+              (\n -> L.filter (\b -> brokerName b == n) (brokers envConfig)) <$> tcpN
             [mqri,mqfi,tctli,tri,tfi]   = is
         return $ Metrics ver sysT runT (MsgNum mqri mqfi tctli tri tfi) (mqs ++ tcps)
       where
@@ -64,5 +67,5 @@ httpServer Env{..} = getFuncs
 userAPI :: Proxy UserAPI
 userAPI = Proxy
 
-apiApp :: Env -> Server.Application
+apiApp :: Env m -> Server.Application
 apiApp env = Server.serve userAPI (httpServer env)

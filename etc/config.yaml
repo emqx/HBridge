@@ -1,12 +1,6 @@
-# File to write log to.
-logFile: test.log
-
-# Log level.
-# It can be one of DEBUG, INFO, WARNING and ERROR.
-logLevel: INFO
-
-# Whether to print log to screen.
-logToStdErr: true
+loggerSetting:
+  formatter: rich
+  level: debug
 
 # Whether to forward MQTT messages to TCP brokers.
 crossForward: true

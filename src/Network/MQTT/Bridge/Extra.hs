@@ -18,7 +18,8 @@ module Network.MQTT.Bridge.Extra
   ) where
 
 import           Control.Exception                (SomeException, try)
-import           Data.Aeson                       (Value(..), Object, encode, decode)
+import           Data.Aeson                       (Object, Value (..), decode,
+                                                   encode)
 import           Data.ByteString                  (ByteString)
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as HM
@@ -26,7 +27,7 @@ import qualified Data.List                        as L
 import qualified Data.Map                         as Map
 import           Data.Text                        (Text)
 import qualified Data.Text                        as Text
-import           Data.Text.Encoding               (encodeUtf8, decodeUtf8)
+import           Data.Text.Encoding               (decodeUtf8, encodeUtf8)
 import           Data.UUID                        (UUID)
 import qualified Data.UUID                        as UUID
 import qualified Data.Vector                      as V
@@ -36,9 +37,9 @@ import           Network.MQTT.Bridge.SQL.AbsESQL
 import           Network.MQTT.Bridge.SQL.ErrM
 import           Network.MQTT.Bridge.SQL.ParESQL
 import           Network.MQTT.Bridge.SQL.SkelESQL
-import           Network.MQTT.Bridge.Types        (Message(..), FuncSeries)
+import           Network.MQTT.Bridge.Types        (FuncSeries, Message (..))
 import           Network.MQTT.Topic               (Topic, match)
-import           Network.MQTT.Types               (PublishRequest(..))
+import           Network.MQTT.Types               (PublishRequest (..))
 import           Network.Simple.TCP               as TCP
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
