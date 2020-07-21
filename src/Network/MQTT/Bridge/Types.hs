@@ -1,9 +1,16 @@
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs               #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Network.MQTT.Bridge.Types
   ( BrokerName
@@ -13,55 +20,61 @@ module Network.MQTT.Bridge.Types
   , ConnectionType(..)
   , Broker(..)
   , Config(..)
+  , LoggerSetting(..)
   , Bridge(..)
   , Env(..)
-  , Priority(..)
-  , Log(..)
-  , Logger(..)
+  , App
   , MsgCounter(..)
   , MsgNum(..)
   , Metrics(..)
   , FuncSeries
 
+  , runApp
   , parseConfig
-  , mkLogger
-  , mkLog
-  , commitLog
-  , logging
-  , logProcess
   , runFuncSeries
   ) where
 
-import           Control.Concurrent.STM ( TVar, TChan, newTChanIO, readTChan
-                                        , writeTChan, atomically)
-import           Control.Exception      (SomeException, try)
-import           Control.Monad          (when, forever, foldM)
-import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Except   (ExceptT, throwError, runExceptT)
-import           Control.Monad.State    (StateT, runStateT)
-import           Control.Monad.Writer   (WriterT, runWriterT)
-import           Data.Aeson             (FromJSON(..), ToJSON, Value(..))
-import qualified Data.ByteString.Lazy   as BL
-import           Data.Int               (Int64)
-import qualified Data.List              as L
-import qualified Data.Map               as Map
-import           Data.Maybe             (fromJust, isNothing)
-import           Data.Text.Encoding     (encodeUtf8, decodeUtf8)
-import           Data.Time              (UTCTime, getCurrentTime)
-import           Data.UUID              (UUID)
-import qualified Data.Yaml              as Yaml
-import           GHC.Generics           (Generic)
-import           Network.MQTT.Client    (Topic, MQTTClient)
-import           Network.MQTT.Types     (PublishRequest(..), QoS(..), Property(..))
-import           Network.Simple.TCP     (Socket)
-import           Network.URI            (URI, URIAuth, parseURI)
-import           Options.Applicative    ( Parser, execParser, strOption, long
-                                        , short, metavar, help, info, helper
-                                        , fullDesc, progDesc, header, (<**>))
-import           System.IO              ( Handle, IOMode(WriteMode), openFile, stderr
-                                        , hPutStrLn)
-import           System.Metrics.Counter (Counter)
-import           Text.Printf            (printf)
+import qualified Colog
+import           Control.Applicative         ((<|>))
+import           Control.Concurrent.STM      (TChan, TVar, atomically,
+                                              newTChanIO, readTChan, writeTChan)
+import           Control.Exception           (SomeException, try)
+import           Control.Monad               (foldM, forever, when)
+import           Control.Monad.Base          (MonadBase)
+import           Control.Monad.Except        (ExceptT, runExceptT, throwError)
+import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.Reader        (MonadReader, ReaderT, runReaderT)
+import           Control.Monad.State         (StateT, runStateT)
+import           Control.Monad.Trans.Control (MonadBaseControl (..))
+import           Control.Monad.Writer        (WriterT, runWriterT)
+import           Data.Aeson                  (FromJSON (..), ToJSON, Value (..),
+                                              (.:))
+import qualified Data.Aeson                  as Aeson
+import qualified Data.Aeson.Types            as Aeson
+import qualified Data.ByteString.Lazy        as BL
+import           Data.Int                    (Int64)
+import qualified Data.List                   as L
+import qualified Data.Map                    as Map
+import           Data.Maybe                  (fromJust, isNothing)
+import           Data.Text                   (Text)
+import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
+import           Data.Time                   (UTCTime, getCurrentTime)
+import           Data.UUID                   (UUID)
+import qualified Data.Yaml                   as Yaml
+import           GHC.Generics                (Generic)
+import           Network.MQTT.Client         (MQTTClient, Topic)
+import           Network.MQTT.Types          (Property (..),
+                                              PublishRequest (..), QoS (..))
+import           Network.Simple.TCP          (Socket)
+import           Network.URI                 (URI, URIAuth, parseURI)
+import           Options.Applicative         (Parser, execParser, fullDesc,
+                                              header, help, helper, info, long,
+                                              metavar, progDesc, short,
+                                              strOption, (<**>))
+import           System.IO                   (Handle, IOMode (WriteMode),
+                                              hPutStrLn, openFile, stderr)
+import           System.Metrics.Counter      (Counter)
+import           Text.Printf                 (printf)
 
 type BrokerName  = String
 type FwdsTopics  = [Topic]
@@ -69,13 +82,12 @@ type SubsTopics  = [Topic]
 
 -- | Message type. The payload part is in 'ByteString'
 -- type currently but can be modified soon.
-data Message =
-  PlainMsg
-  { payload :: BL.ByteString
-  , topic   :: Topic
-  }
-  | PubPkt PublishRequest BrokerName
-  deriving (Show, Generic)
+data Message = PlainMsg
+    { payload :: BL.ByteString
+    , topic   :: Topic
+    }
+    | PubPkt PublishRequest BrokerName
+    deriving (Show, Generic)
 
 instance Ord Value where
   (Object _)  <= (Object _)  = True
@@ -118,8 +130,8 @@ deriving instance ToJSON Message
 -- | Type of connections. Sometimes TCP and MQTT
 -- connections are both called "brokers".
 data ConnectionType = TCPConnection
-                    | MQTTConnection
-                    deriving (Show, Eq, Generic, FromJSON, ToJSON)
+    | MQTTConnection
+    deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 -- | A broker. It contains only static information so
 -- it can be formed directly from config file without
@@ -141,15 +153,13 @@ data Broker = Broker
 
 -- | Config of the bridge, it can be described by
 -- brokers it (will) connect to.
-data Config = Config
-    { brokers      :: [Broker]
-    , logToStdErr  :: Bool
-    , logFile      :: FilePath
-    , logLevel     :: Priority
-    , crossForward :: Bool
-    , sqlFiles     :: [FilePath]
+data Config m = Config
+    { brokers       :: [Broker]
+    , crossForward  :: Bool
+    , sqlFiles      :: [FilePath]
+    , loggerSetting :: LoggerSetting m
     }
-    deriving (Show, Generic, FromJSON, ToJSON)
+    deriving (Generic, FromJSON)
 
 configP :: Parser String
 configP = strOption
@@ -159,7 +169,7 @@ configP = strOption
   <> help "File path of configuration file" )
 
 -- | Parse a config file. It may fail and throw an exception.
-parseConfig :: ExceptT String IO Config
+parseConfig :: MonadIO m => ExceptT String IO (Config m)
 parseConfig = do
     f      <- liftIO $ execParser opts
     e_conf <- liftIO $ Yaml.decodeFileEither f
@@ -208,78 +218,69 @@ data Bridge = Bridge
     }
 
 -- | Environment. It describes the state of system.
-data Env = Env
+data Env m = Env
     { envBridge :: Bridge
-    , envConfig :: Config
-    , envLogger :: Logger
+    , envConfig :: Config m
     }
+
+newtype App a = App { unApp :: ReaderT (Env App) IO a }
+  deriving newtype ( Functor, Applicative, Monad
+                   , MonadIO, MonadReader (Env App), MonadBase IO
+                   )
+
+instance MonadBaseControl IO App where
+  type StM App a = a
+  liftBaseWith f = App $ liftBaseWith $ \x -> f (x . unApp)
+  restoreM = App . restoreM
+
+runApp :: Env App -> App a -> IO a
+runApp env app = runReaderT (unApp app) env
 
 ----------------------------------------------------------------------------------------------
--- | Priority of log
-data Priority = DEBUG
-    | INFO
-    | WARNING
-    | ERROR
-    deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
+newtype LoggerSetting m =
+  LoggerSetting { logAction :: Colog.LogAction m Colog.Message }
 
--- | Log. It contains priority, time stamp and log content.
-data Log = Log
-    { logContent  :: String
-    , logPriority :: Priority
-    , logTime     :: UTCTime
-    }
-    deriving (Eq)
-instance Show Log where
-  show Log{..} = printf "[%7s][%30s] %s"
-                        (show logPriority)
-                        (show logTime)
-                        logContent
+instance MonadIO m => FromJSON (LoggerSetting m) where
+  parseJSON v = Aeson.withObject "logger"        customMode v
+            <|> Aeson.withText   "simple-logger" simpleMode v
 
--- | A logger is in fact a STM channel.
-data Logger = Logger
-    { loggerChan     :: TChan Log
-    , loggerLevel    :: Priority
-    , loggerFile     :: FilePath
-    , loggerToStdErr :: Bool
-    }
+instance Colog.HasLog (Env m) Colog.Message m where
+  getLogAction :: Env m -> Colog.LogAction m Colog.Message
+  getLogAction = logAction . loggerSetting . envConfig
+  {-# INLINE getLogAction #-}
 
--- | Make a logger from config file.
-mkLogger :: Config -> IO Logger
-mkLogger Config{..} = do
-  ch <- newTChanIO
-  return $ Logger ch logLevel logFile logToStdErr
+  setLogAction :: Colog.LogAction m Colog.Message -> Env m -> Env m
+  setLogAction new env =
+    let settings = envConfig env
+     in env {envConfig = settings {loggerSetting = LoggerSetting new}}
+  {-# INLINE setLogAction #-}
 
--- | Generate a log item.
-mkLog :: Priority -> String -> IO Log
-mkLog p s = do
-  time <- getCurrentTime
-  return (Log s p time)
+simpleMode :: MonadIO m => Text -> Aeson.Parser (LoggerSetting m)
+simpleMode fmt = LoggerSetting <$> formatter fmt
 
--- | Pass a log item to logger.
-commitLog :: Log -> Logger -> IO ()
-commitLog l Logger{..} = when (logPriority l >= loggerLevel)
-                              (atomically $ writeTChan loggerChan l)
+customMode :: MonadIO m => Aeson.Object -> Aeson.Parser (LoggerSetting m)
+customMode obj = do
+  fmt <- obj .: "formatter" :: Aeson.Parser Text
+  lvl <- obj .: "level"     :: Aeson.Parser Text
+  action <- formatter fmt
+  LoggerSetting <$> level action lvl
 
--- | Generate and then commit a log item.
-logging :: Logger -> Priority -> String -> IO ()
-logging ch p s = mkLog p s >>= flip commitLog ch
+formatter :: MonadIO m => Text -> Aeson.Parser (Colog.LogAction m Colog.Message)
+formatter "rich"   = return Colog.richMessageAction
+formatter "simple" = return Colog.simpleMessageAction
+formatter _        = fail "Invalid logger formatter"
 
--- | Thread that processes all the log items
-logProcess :: Logger -> IO ()
-logProcess Logger{..} = do
-  time <- getCurrentTime
-  (h'  :: Either SomeException Handle) <- try $ openFile loggerFile WriteMode
-  (dh' :: Either SomeException Handle) <- case h' of
-    Left _  -> try $ openFile (show time ++ ".log") WriteMode
-    Right _ -> return h'
-
-  forever $ do
-    log <- atomically $ readTChan loggerChan
-    let s = show log
-    when loggerToStdErr (hPutStrLn stderr s)
-    case h' <> dh' of
-      Right h -> hPutStrLn h s
-      _       -> return ()
+level :: MonadIO m
+      => Colog.LogAction m Colog.Message
+      -> Text
+      -> Aeson.Parser (Colog.LogAction m Colog.Message)
+level action = \case
+  "debug"   -> return $ Colog.filterBySeverity Colog.D sev action
+  "info"    -> return $ Colog.filterBySeverity Colog.I sev action
+  "warning" -> return $ Colog.filterBySeverity Colog.W sev action
+  "error"   -> return $ Colog.filterBySeverity Colog.E sev action
+  _         -> fail "Invalid logger level"
+  where sev Colog.Msg{..} = msgSeverity
 
 ----------------------------------------------------------------------------------------------
 -- | Num of messages. Read from counters.
