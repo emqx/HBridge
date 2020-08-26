@@ -3,4 +3,16 @@ packages: ./*.cabal
 source-repository-package
   type: git
   location: https://github.com/hstream-io/hesp.git
-  tag: ac22865e0b4cc216941582b2da9f360918b98333
+  tag: bc475960a49349def6fbc0daa76b24f86d3f5df2
+
+-- TODO: If a newer co-log package is released, we can safely remove this.
+source-repository-package
+  type: git
+  location: https://github.com/kowainik/co-log
+  tag: 45d5dd6c33f722628a0f9c10e4297f5e11ede20f
+  subdir: co-log-core
+source-repository-package
+  type: git
+  location: https://github.com/kowainik/co-log
+  tag: 45d5dd6c33f722628a0f9c10e4297f5e11ede20f
+  subdir: co-log

@@ -1,12 +1,15 @@
-resolver: lts-15.13
+resolver: lts-16.6
 
 packages:
 - .
 
 extra-deps:
-  - ekg-0.4.0.15
-  - ekg-core-0.1.1.7
-  - ekg-json-0.1.0.6
+  - ekg-core-0.1.1.7@sha256:c4356aefea0e1e2f80a236d3b3f81b83b445c1e53519302e96477da0adee2e9f,2039
   - net-mqtt-0.7.0.1
   - git: https://github.com/hstream-io/hesp.git
-    commit: ac22865e0b4cc216941582b2da9f360918b98333
+    commit: bc475960a49349def6fbc0daa76b24f86d3f5df2
+
+  # TODO: If a newer co-log package is released, we can safely remove this.
+  - git: https://github.com/kowainik/co-log
+    commit: 45d5dd6c33f722628a0f9c10e4297f5e11ede20f
+    subdirs: [co-log-core, co-log]
