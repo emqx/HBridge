@@ -1,0 +1,57 @@
+comment "--" ;
+comment "{-" "-}" ;
+
+SProgS. Program ::= Select ;
+SProgSW. Program ::= Select Where ;
+SProgSM. Program ::= Select Modify ;
+SProgSWM. Program ::= Select Where Modify ;
+SSel. Select ::= "SELECT" Fields ;
+SWhr. Where ::= "WHERE" Conds ;
+SMod. Modify ::= "MODIFY" Mods ;
+
+EFields. Fields ::= [Field];
+terminator Fields "" ;
+separator Field "," ;
+
+EConds. Conds ::= [Cond] ;
+terminator Conds "" ;
+separator Cond "," ;
+
+EMods. Mods ::= [Mod] ;
+terminator Mods "" ;
+separator Mod "," ;
+
+EField. Field ::= Ident ;
+EFieldAs. Field ::= Ident "AS" Ident ;
+
+ECondEQ. Cond ::= Ident "==" Var ;
+ECondNE. Cond ::= Ident "/=" Var ;
+ECondGT. Cond ::= Ident ">"  Var ;
+ECondLE. Cond ::= Ident "<"  Var ;
+ECondMt. Cond ::= Ident "=~" String ;
+
+VTrue. Boolean ::= "True" ;
+VFalse. Boolean ::= "False" ;
+
+VarInt. Var ::= Integer ;
+VarDouble. Var ::= Double ;
+VarString. Var ::= String ;
+VarChar. Var ::= Char ;
+VarBool. Var ::= Boolean ;
+
+
+EMod. Mod ::= Ident "TO" Var ;
+
+{-
+SELECT (_ as _), _, _
+WHERE  topic =~ _,
+       _ ... _     (topic, QoS, retain 无需显式 SELECT)
+MODIFY topic TO _,
+       retain TO _,
+       QoS To _,
+       Props (TO/ADD/DEL) _, _, ...
+       field_i TO _,
+       ...
+
+
+-}
