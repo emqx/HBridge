@@ -25,7 +25,7 @@ HBridge also provides some extra features:
 
 - Mountpoint: It means that you can set a mountpoint for each broker the bridge connects to. The mountpoint will be combined with the original topic when a message is forwarded. This is useful to prevent messages from looping between brokers. For example, mountpoint `mp/test/` can modify topic `home/room/temp` to `mp/test/home/room/temp`.
 
-## Build and Test
+## Build and Try
 
 ### Build
 To build from source, haskell build tool `stack` or `cabal` is required.
@@ -41,6 +41,15 @@ With `cabal`:
 ```
 $ cabal new-build
 ```
+
+### Try it
+There are free public MQTT servers such as `mqtt://test.mosquitto.org`. A test config file is at `etc/config-test.yaml`. You can run
+
+```
+$ stack exec -- HBridge --config etc/config-test.yaml
+```
+
+to try it. Also you can modify config file to use your own server.
 
 ## Configuration
 
