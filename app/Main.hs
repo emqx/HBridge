@@ -46,7 +46,6 @@ import qualified Network.Simple.TCP              as TCP
 import qualified Network.Wai.Handler.Warp        as Warp
 import           Prelude                         hiding (read)
 import           System.Metrics.Counter          (inc)
-import qualified System.Remote.Monitoring        as Monitoring
 import           Text.Printf                     (printf)
 
 
@@ -56,7 +55,6 @@ main = do
   case conf' of
     Left  e    -> error e
     Right conf -> do
-      _    <- Monitoring.forkServer "localhost" 22333
       env' <- runReaderT newEnv1 conf
       env  <- runApp env' newEnv2
       _    <- async (Warp.run 8999 (apiApp env))
