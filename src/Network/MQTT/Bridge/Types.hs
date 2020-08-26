@@ -36,10 +36,9 @@ module Network.MQTT.Bridge.Types
 
 import qualified Colog
 import           Control.Applicative         ((<|>))
-import           Control.Concurrent.STM      (TChan, TVar, atomically,
-                                              newTChanIO, readTChan, writeTChan)
-import           Control.Exception           (SomeException, try)
-import           Control.Monad               (foldM, forever, when)
+import           Control.Concurrent.STM      (TChan, TVar)
+import           Control.Exception           (SomeException)
+import           Control.Monad               (foldM, when)
 import           Control.Monad.Base          (MonadBase)
 import           Control.Monad.Except        (ExceptT, runExceptT, throwError)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
@@ -58,7 +57,7 @@ import qualified Data.Map                    as Map
 import           Data.Maybe                  (fromJust, isNothing)
 import           Data.Text                   (Text)
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
-import           Data.Time                   (UTCTime, getCurrentTime)
+import           Data.Time                   (UTCTime)
 import           Data.UUID                   (UUID)
 import qualified Data.Yaml                   as Yaml
 import           GHC.Generics                (Generic)
@@ -71,8 +70,6 @@ import           Options.Applicative         (Parser, execParser, fullDesc,
                                               header, help, helper, info, long,
                                               metavar, progDesc, short,
                                               strOption, (<**>))
-import           System.IO                   (Handle, IOMode (WriteMode),
-                                              hPutStrLn, openFile, stderr)
 import           System.Metrics.Counter      (Counter)
 import           Text.Printf                 (printf)
 
@@ -90,14 +87,13 @@ data Message = PlainMsg
     deriving (Show, Generic)
 
 instance Ord Value where
-  (Object _)  <= (Object _)  = True
-  (Array _)   <= (Array _)   = True
   (String s1) <= (String s2) = s1 <= s2
   (Number n1) <= (Number n2) = n1 <= n2
   (Bool b1)   <= (Bool b2)   = b1 <= b2
+  _ <= _ = True
 
 instance Semigroup Value where
-  v1 <> v2 = v1
+  v1 <> _ = v1
 
 deriving instance Read QoS
 

@@ -28,12 +28,10 @@ import           System.Metrics.Counter    (read)
 
 
 type UserAPI = "funcs"   :> Get '[JSON] [String]
---        :<|> "funcs"   :> ReqBody '[JSON] Message :> Post '[JSON] String
           :<|> "metrics" :> Get '[JSON] Metrics
 
 httpServer :: Env m -> Server.Server UserAPI
 httpServer Env{..} = getFuncs
---              :<|> postFuncs
                 :<|> getMetrics
   where
     getFuncs :: Server.Handler [String]
