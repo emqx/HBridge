@@ -42,7 +42,7 @@ import           Network.MQTT.Client             (MQTTClient, pubAliased,
                                                   subscribe)
 import           Network.MQTT.Types              (PublishRequest (..),
                                                   subOptions)
-import qualified Network.Simple.TCP              as TCP
+import qualified Network.Socket                  as NS
 import qualified Network.Wai.Handler.Warp        as Warp
 import           Prelude                         hiding (read)
 import           System.Metrics.Counter          (inc)
@@ -184,7 +184,7 @@ runMQTT (n, mc) = do
 
 -- | Create a thread (in fact two, receiving and forwarding)
 -- for certain TCP connection.
-processTCP :: (BrokerName, (TCP.Socket, UUID)) -> App ()
+processTCP :: (BrokerName, (NS.Socket, UUID)) -> App ()
 processTCP tup@(n, (s, _)) = do
     env@(Env Bridge {..} _) <- ask
     _ <- liftIO $
@@ -199,7 +199,7 @@ processTCP tup@(n, (s, _)) = do
           liftIO . atomically $ modifyTVar activeTCP (Map.delete n)
           Colog.logWarning . Text.pack $
             printf "[TCP]  Broker %s disconnected (%s)" n (show e)
-          TCP.closeSock s
+          liftIO $ NS.close s
           return ()
         _      -> return ()
 
@@ -207,7 +207,7 @@ processTCP tup@(n, (s, _)) = do
 -- from/to a certain TCP connection.
 -- It is bridge-scoped and does not care about specific behaviours
 -- of servers, which is provided by fwdTCPMessage' and 'recvTCPMessge'.
-runTCP :: (BrokerName, (TCP.Socket, UUID)) -> App ()
+runTCP :: (BrokerName, (NS.Socket, UUID)) -> App ()
 runTCP (n, (s, cid)) = do
     env@(Env Bridge {..} Config {..}) <- ask
     ch <- liftIO . atomically $ dupTChan broadcastChan
