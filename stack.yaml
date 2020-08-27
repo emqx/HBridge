@@ -4,7 +4,11 @@ packages:
 - .
 
 extra-deps:
-  - ekg-core-0.1.1.7@sha256:c4356aefea0e1e2f80a236d3b3f81b83b445c1e53519302e96477da0adee2e9f,2039
+  - aeson-1.5.2.0
+  - servant-0.18
+  - servant-server-0.18
+  - network-3.1.2.0
+  - ekg-core-0.1.1.7
   - net-mqtt-0.7.0.1
   - git: https://github.com/hstream-io/hesp.git
     commit: bc475960a49349def6fbc0daa76b24f86d3f5df2

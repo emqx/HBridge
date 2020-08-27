@@ -64,7 +64,7 @@ import           GHC.Generics                (Generic)
 import           Network.MQTT.Client         (MQTTClient, Topic)
 import           Network.MQTT.Types          (Property (..),
                                               PublishRequest (..), QoS (..))
-import           Network.Simple.TCP          (Socket)
+import           Network.Socket              (Socket)
 import           Network.URI                 (URI, URIAuth, parseURI)
 import           Options.Applicative         (Parser, execParser, fullDesc,
                                               header, help, helper, info, long,
@@ -85,15 +85,6 @@ data Message = PlainMsg
     }
     | PubPkt PublishRequest BrokerName
     deriving (Show, Generic)
-
-instance Ord Value where
-  (String s1) <= (String s2) = s1 <= s2
-  (Number n1) <= (Number n2) = n1 <= n2
-  (Bool b1)   <= (Bool b2)   = b1 <= b2
-  _ <= _ = True
-
-instance Semigroup Value where
-  v1 <> _ = v1
 
 deriving instance Read QoS
 

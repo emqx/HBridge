@@ -33,7 +33,8 @@ import           Data.UUID                 (UUID)
 import qualified Data.UUID                 as UUID
 import qualified Data.Vector               as V
 import qualified Network.HESP              as HESP
-import           Network.MQTT.Bridge.Extra
+import           Network.MQTT.Bridge.Extra (connect, parseSQLFile, textToBL,
+                                            composeMP, blToText)
 import           Network.MQTT.Bridge.Types (App, Bridge (..), Broker (..),
                                             BrokerName, Config (..),
                                             ConnectionType (..), Env (..),
@@ -43,7 +44,7 @@ import           Network.MQTT.Client       (MQTTClient, MQTTConfig (..),
                                             MessageCallback (..), connectURI,
                                             mqttConfig, subscribe)
 import           Network.MQTT.Types        (PublishRequest (..), subOptions)
-import           Network.Simple.TCP        (Socket, connectSock)
+import           Network.Socket            (Socket)
 import           Network.URI               (parseURI, uriAuthority, uriPort,
                                             uriRegName)
 import           System.Metrics.Counter    (inc, new)
@@ -63,7 +64,7 @@ getSocket = do
   when (isNothing host' || isNothing port') $
     throwError $ printf "Invalid URI : %s ." (show uri)
   (s' :: Either SomeException Socket) <- liftIO . try $ do
-    (sock, _) <- connectSock (fromJust host') (fromJust port')
+    sock <- connect (fromJust host') (fromJust port')
     return sock
   case s' of
     Left e  -> throwError $

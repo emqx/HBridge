@@ -11,6 +11,7 @@ module Network.MQTT.Bridge.Extra
   , textToBL
   , insertToN
   , deleteAtN
+  , connect
   , fwdTCPMessage
   , recvTCPMessages
   , recvBridgeMsgs
@@ -40,7 +41,8 @@ import           Network.MQTT.Bridge.SQL.SkelESQL
 import           Network.MQTT.Bridge.Types        (FuncSeries, Message (..))
 import           Network.MQTT.Topic               (Topic, match)
 import           Network.MQTT.Types               (PublishRequest (..))
-import           Network.Simple.TCP               as TCP
+import           Network.Socket                   (Socket)
+import qualified Network.Socket                   as NS
 
 lookup' :: ParsedProg -> Text -> Object -> Maybe Value
 lookup' ParsedProg{..} n o = case a1 of
@@ -203,6 +205,18 @@ deleteAtN n xs
     in case p2 of
          []     -> p1
          (_:ys) -> p1 ++ ys
+
+connect :: NS.HostName -> NS.ServiceName -> IO Socket
+connect host port = do
+    addr <- resolve
+    sock <- NS.socket (NS.addrFamily addr) (NS.addrSocketType addr) (NS.addrProtocol addr)
+    NS.connect sock $ NS.addrAddress addr
+    return sock
+  where
+    resolve = do
+      let hints = NS.defaultHints { NS.addrSocketType = NS.Stream }
+      head <$> NS.getAddrInfo (Just hints) (Just host) (Just port)
+
 
 -- | Forward message to certain broker. Broker-dependent and will be
 -- replaced soon.

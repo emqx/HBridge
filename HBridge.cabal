@@ -11,7 +11,7 @@ license-file:       LICENSE
 copyright:          2020 EMQ Technologies Co., Ltd.
 author:             Commelina
 maintainer:         maosics@gmail.com
-tested-with:        GHC ==8.6.5 || ==8.8.1 || ==8.8.3 || ==8.10.1
+tested-with:        GHC ==8.8.1 || ==8.8.3 || ==8.10.1
 category:           Middleware
 homepage:           https://github.com/emqx/HBridge
 bug-reports:        https://github.com/emqx/HBridge/issues
@@ -41,7 +41,7 @@ library
 
   hs-source-dirs:   src
   build-depends:
-    , aeson
+    , aeson                 >=1.5.2
     , array
     , async
     , base                  >=4.9   && <5
@@ -52,13 +52,13 @@ library
     , hesp
     , monad-control
     , mtl
-    , net-mqtt
-    , network-simple
+    , net-mqtt              >=0.7
+    , network               >=3.1.2
     , network-uri
     , optparse-applicative
     , scientific
-    , servant
-    , servant-server
+    , servant               >=0.18
+    , servant-server        >=0.18
     , stm
     , text
     , time                  >=1.9.1
@@ -78,7 +78,7 @@ executable HBridge
   main-is:          Main.hs
   hs-source-dirs:   app
   build-depends:
-    , aeson
+    , aeson                 >=1.5.2
     , array
     , async
     , base                  >=4.9   && <5
@@ -89,11 +89,10 @@ executable HBridge
     , HBridge
     , hesp
     , mtl
-    , net-mqtt
-    , network-simple
+    , net-mqtt              >=0.7
+    , network               >=3.1.2
     , network-uri
     , optparse-applicative
-    , scientific
     , stm
     , text
     , time                  >=1.9.1
